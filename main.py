@@ -4,6 +4,21 @@ import shutil
 import sys
 import configparser
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
+# Thread-local storage for FTP connections
+thread_local = threading.local()
+
+def get_ftp_connection(settings):
+    """Create or get thread-local FTP connection"""
+    if not hasattr(thread_local, "ftp"):
+        ftp = ftplib.FTP(settings['ftp_host'])
+        ftp.login(settings['ftp_user'], settings['ftp_pass'])
+        if settings['ftp_directory']:
+            ftp.cwd(settings['ftp_directory'])
+        thread_local.ftp = ftp
+    return thread_local.ftp
 
 def load_settings(ini_file):
     config = configparser.ConfigParser()
@@ -26,7 +41,8 @@ def load_settings(ini_file):
         'ftp_host': settings['FTP_HOST'],
         'ftp_user': settings['FTP_USER'],
         'ftp_pass': settings['FTP_PASS'],
-        'direction': settings.get('DIRECTION', 'down')  # Default to down if not specified
+        'direction': settings.get('DIRECTION', 'down'),
+        'concurrent_operations': int(settings.get('CONCURRENT_UPLOADS_OR_DOWNLOADS', '1'))
     }
 
 def parse_arguments():
@@ -84,23 +100,6 @@ def get_local_files_recursive(local_dir, base_dir=None):
             files.extend(get_local_files_recursive(full_path, base_dir))
     return files
 
-# Progress callback function for download
-def download_progress_callback(block):
-    global downloaded_size
-    downloaded_size += len(block)
-    percent_complete = downloaded_size / total_size * 100
-    sys.stdout.write(f'\rDownloading {current_file}: {percent_complete:.2f}%')
-    sys.stdout.flush()
-    local_file.write(block)
-
-# Progress callback function for upload
-def upload_progress_callback(block):
-    global uploaded_size
-    uploaded_size += len(block)
-    percent_complete = uploaded_size / total_size * 100
-    sys.stdout.write(f'\rUploading {current_file}: {percent_complete:.2f}%')
-    sys.stdout.flush()
-
 def ensure_local_dir(path):
     """Create local directory if it doesn't exist"""
     if not os.path.exists(path):
@@ -124,58 +123,15 @@ def ensure_ftp_dir(ftp, path):
             except ftplib.error_perm:
                 ftp.mkd(current)
 
-def download_from_ftp(ftp, settings, ftp_files, local_files):
-    global downloaded_size, total_size, current_file, local_file
-    
-    # Sync FTP to local directory
-    for ftp_file in ftp_files:
-        if ftp_file.endswith('.') or ftp_file.endswith('..'):
-            continue
+def upload_file(args):
+    """Upload a single file to FTP server"""
+    local_file, settings, ftp_files = args
+    if local_file in ['.', '..']:
+        return None
 
-        local_file_path = os.path.join(settings['local_directory'], ftp_file)
-        local_dir = os.path.dirname(local_file_path)
-        ensure_local_dir(local_dir)
-
-        try:
-            total_size = ftp.size(ftp_file)
-        except:
-            print(f"Couldn't get size for {ftp_file}, skipping...")
-            continue
-
-        # Check if file exists and has the same size
-        if os.path.exists(local_file_path):
-            local_size = os.path.getsize(local_file_path)
-            if local_size == total_size:
-                print(f'Skipping {ftp_file} (already exists with same size)')
-                continue
-                
-        downloaded_size = 0
-        current_file = ftp_file
-
-        with open(local_file_path, 'wb') as local_file:
-            ftp.retrbinary(f'RETR {ftp_file}', download_progress_callback, 1024)
-
-        print()  # Newline after each file download
-
-    old_subfolder = os.path.join(settings['local_directory'], 'old')
-    os.makedirs(old_subfolder, exist_ok=True)
-
-    # Move local files not on FTP to /old subfolder
-    for local_file in local_files:
-        if local_file not in ftp_files:
-            local_path = os.path.join(settings['local_directory'], local_file)
-            old_path = os.path.join(old_subfolder, local_file)
-            ensure_local_dir(os.path.dirname(old_path))
-            shutil.move(local_path, old_path)
-
-def upload_to_ftp(ftp, settings, ftp_files, local_files):
-    global uploaded_size, total_size, current_file
-    
-    # Sync local directory to FTP
-    for local_file in local_files:
-        if local_file in ['.', '..']:
-            continue
-
+    try:
+        ftp = get_ftp_connection(settings)
+        
         local_file_path = os.path.join(settings['local_directory'], local_file)
         ftp_file_path = local_file.replace('\\', '/')
         ftp_dir = os.path.dirname(ftp_file_path)
@@ -192,17 +148,95 @@ def upload_to_ftp(ftp, settings, ftp_files, local_files):
                 ftp_size = ftp.size(ftp_file_path)
                 if ftp_size == total_size:
                     print(f'Skipping {local_file} (already exists with same size)')
-                    continue
+                    return None
             except:
                 pass  # File doesn't exist or can't get size, proceed with upload
-                
-        uploaded_size = 0
-        current_file = local_file
 
+        print(f'Uploading {local_file}')
         with open(local_file_path, 'rb') as file:
-            print(f'Uploading {local_file}')
-            ftp.storbinary(f'STOR {ftp_file_path}', file, 1024, upload_progress_callback)
-        print()  # Newline after each file upload
+            ftp.storbinary(f'STOR {ftp_file_path}', file, 1024)
+        
+        print(f'Completed upload of {local_file}')
+        return local_file
+    except Exception as e:
+        print(f"Error uploading {local_file}: {str(e)}")
+        return None
+
+def download_file(args):
+    """Download a single file from FTP server"""
+    ftp_file, settings, local_files = args
+    if ftp_file.endswith('.') or ftp_file.endswith('..'):
+        return None
+
+    try:
+        ftp = get_ftp_connection(settings)
+        
+        local_file_path = os.path.join(settings['local_directory'], ftp_file)
+        local_dir = os.path.dirname(local_file_path)
+        ensure_local_dir(local_dir)
+
+        try:
+            total_size = ftp.size(ftp_file)
+        except:
+            print(f"Couldn't get size for {ftp_file}, skipping...")
+            return None
+
+        # Check if file exists and has the same size
+        if os.path.exists(local_file_path):
+            local_size = os.path.getsize(local_file_path)
+            if local_size == total_size:
+                print(f'Skipping {ftp_file} (already exists with same size)')
+                return None
+
+        print(f'Downloading {ftp_file}')
+        with open(local_file_path, 'wb') as file:
+            ftp.retrbinary(f'RETR {ftp_file}', file.write, 1024)
+        
+        print(f'Completed download of {ftp_file}')
+        return ftp_file
+    except Exception as e:
+        print(f"Error downloading {ftp_file}: {str(e)}")
+        return None
+
+def sync_files(settings, ftp_files, local_files, operation_func, file_list):
+    """Sync files using concurrent operations"""
+    max_workers = settings['concurrent_operations']
+    completed_files = []
+    
+    print(f"Starting sync with {max_workers} concurrent operations...")
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Create arguments for each file operation
+        args_list = [(f, settings, ftp_files if operation_func == upload_file else local_files) 
+                    for f in file_list]
+        
+        # Submit all tasks and wait for completion
+        future_to_file = {executor.submit(operation_func, args): args[0] 
+                         for args in args_list}
+        
+        for future in as_completed(future_to_file):
+            file = future_to_file[future]
+            try:
+                result = future.result()
+                if result:
+                    completed_files.append(result)
+            except Exception as e:
+                print(f"Operation failed for {file}: {str(e)}")
+    
+    return completed_files
+
+def handle_old_files(settings, completed_files, local_files):
+    """Move files to old directory that are not in completed files"""
+    old_subfolder = os.path.join(settings['local_directory'], 'old')
+    os.makedirs(old_subfolder, exist_ok=True)
+
+    for local_file in local_files:
+        if local_file not in completed_files:
+            local_path = os.path.join(settings['local_directory'], local_file)
+            old_path = os.path.join(old_subfolder, local_file)
+            ensure_local_dir(os.path.dirname(old_path))
+            if os.path.exists(local_path):
+                shutil.move(local_path, old_path)
 
 def main():
     args = parse_arguments()
@@ -226,10 +260,11 @@ def main():
     try:
         if settings['direction'].lower() == 'up':
             print("Syncing local files to FTP...")
-            upload_to_ftp(ftp, settings, ftp_files, local_files)
+            completed_files = sync_files(settings, ftp_files, local_files, upload_file, local_files)
         else:
             print("Syncing FTP files to local...")
-            download_from_ftp(ftp, settings, ftp_files, local_files)
+            completed_files = sync_files(settings, ftp_files, local_files, download_file, ftp_files)
+            handle_old_files(settings, completed_files, local_files)
     finally:
         # Close FTP connection
         ftp.quit()
