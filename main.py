@@ -34,6 +34,56 @@ def parse_arguments():
     parser.add_argument('settings_file', help='Path to the settings INI file')
     return parser.parse_args()
 
+def get_ftp_files_recursive(ftp, path='.'):
+    """Recursively list files and directories on FTP server"""
+    files = []
+    try:
+        ftp.cwd(path)
+        items = ftp.nlst()
+        
+        for item in items:
+            if item in ['.', '..']:
+                continue
+                
+            try:
+                # Try to change into the directory
+                ftp.cwd(item)
+                # If successful, it's a directory
+                ftp.cwd('..')  # Go back
+                subpath = os.path.join(path, item).replace('\\', '/')
+                # Recursively get files from subdirectory
+                files.extend(get_ftp_files_recursive(ftp, subpath))
+            except ftplib.error_perm:
+                # If failed, it's a file
+                file_path = os.path.join(path, item).replace('\\', '/')
+                if path == '.':
+                    files.append(item)
+                else:
+                    files.append(file_path)
+                    
+        if path != '.':
+            ftp.cwd('..')
+            
+    except ftplib.error_perm as e:
+        print(f"Error accessing path {path}: {str(e)}")
+        
+    return files
+
+def get_local_files_recursive(local_dir, base_dir=None):
+    """Recursively list files in local directory"""
+    if base_dir is None:
+        base_dir = local_dir
+        
+    files = []
+    for item in os.listdir(local_dir):
+        full_path = os.path.join(local_dir, item)
+        if os.path.isfile(full_path):
+            rel_path = os.path.relpath(full_path, base_dir).replace('\\', '/')
+            files.append(rel_path)
+        elif os.path.isdir(full_path) and item != 'old':
+            files.extend(get_local_files_recursive(full_path, base_dir))
+    return files
+
 # Progress callback function for download
 def download_progress_callback(block):
     global downloaded_size
@@ -51,6 +101,29 @@ def upload_progress_callback(block):
     sys.stdout.write(f'\rUploading {current_file}: {percent_complete:.2f}%')
     sys.stdout.flush()
 
+def ensure_local_dir(path):
+    """Create local directory if it doesn't exist"""
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+def ensure_ftp_dir(ftp, path):
+    """Create FTP directory if it doesn't exist"""
+    try:
+        ftp.cwd(path)
+        ftp.cwd('/')  # Go back to root
+    except ftplib.error_perm:
+        # Create directory and any missing parent directories
+        parts = path.split('/')
+        current = ''
+        for part in parts:
+            if not part:
+                continue
+            current = f"{current}/{part}"
+            try:
+                ftp.cwd(current)
+            except ftplib.error_perm:
+                ftp.mkd(current)
+
 def download_from_ftp(ftp, settings, ftp_files, local_files):
     global downloaded_size, total_size, current_file, local_file
     
@@ -60,7 +133,14 @@ def download_from_ftp(ftp, settings, ftp_files, local_files):
             continue
 
         local_file_path = os.path.join(settings['local_directory'], ftp_file)
-        total_size = ftp.size(ftp_file)
+        local_dir = os.path.dirname(local_file_path)
+        ensure_local_dir(local_dir)
+
+        try:
+            total_size = ftp.size(ftp_file)
+        except:
+            print(f"Couldn't get size for {ftp_file}, skipping...")
+            continue
 
         # Check if file exists and has the same size
         if os.path.exists(local_file_path):
@@ -73,7 +153,7 @@ def download_from_ftp(ftp, settings, ftp_files, local_files):
         current_file = ftp_file
 
         with open(local_file_path, 'wb') as local_file:
-            ftp.retrbinary('RETR ' + ftp_file, download_progress_callback, 1024)
+            ftp.retrbinary(f'RETR {ftp_file}', download_progress_callback, 1024)
 
         print()  # Newline after each file download
 
@@ -83,8 +163,10 @@ def download_from_ftp(ftp, settings, ftp_files, local_files):
     # Move local files not on FTP to /old subfolder
     for local_file in local_files:
         if local_file not in ftp_files:
-            shutil.move(os.path.join(settings['local_directory'], local_file), 
-                       os.path.join(old_subfolder, local_file))
+            local_path = os.path.join(settings['local_directory'], local_file)
+            old_path = os.path.join(old_subfolder, local_file)
+            ensure_local_dir(os.path.dirname(old_path))
+            shutil.move(local_path, old_path)
 
 def upload_to_ftp(ftp, settings, ftp_files, local_files):
     global uploaded_size, total_size, current_file
@@ -95,12 +177,19 @@ def upload_to_ftp(ftp, settings, ftp_files, local_files):
             continue
 
         local_file_path = os.path.join(settings['local_directory'], local_file)
+        ftp_file_path = local_file.replace('\\', '/')
+        ftp_dir = os.path.dirname(ftp_file_path)
+        
+        if ftp_dir:
+            ensure_ftp_dir(ftp, ftp_dir)
+            ftp.cwd('/')  # Go back to root
+
         total_size = os.path.getsize(local_file_path)
 
         # Check if file exists and has the same size on FTP
         if local_file in ftp_files:
             try:
-                ftp_size = ftp.size(local_file)
+                ftp_size = ftp.size(ftp_file_path)
                 if ftp_size == total_size:
                     print(f'Skipping {local_file} (already exists with same size)')
                     continue
@@ -112,7 +201,7 @@ def upload_to_ftp(ftp, settings, ftp_files, local_files):
 
         with open(local_file_path, 'rb') as file:
             print(f'Uploading {local_file}')
-            ftp.storbinary(f'STOR {local_file}', file, 1024, upload_progress_callback)
+            ftp.storbinary(f'STOR {ftp_file_path}', file, 1024, upload_progress_callback)
         print()  # Newline after each file upload
 
 def main():
@@ -129,10 +218,10 @@ def main():
     # Change to the desired directory on FTP
     ftp.cwd(settings['ftp_directory'])
 
-    # Get list of files
-    ftp_files = ftp.nlst()
-    local_files = [f for f in os.listdir(settings['local_directory']) 
-                  if os.path.isfile(os.path.join(settings['local_directory'], f))]
+    # Get list of files recursively
+    print("Getting file lists...")
+    ftp_files = get_ftp_files_recursive(ftp)
+    local_files = get_local_files_recursive(settings['local_directory'])
 
     try:
         if settings['direction'].lower() == 'up':
