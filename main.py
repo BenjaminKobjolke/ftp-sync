@@ -29,15 +29,15 @@ def load_settings(ini_file):
         raise ValueError("Missing [FTP] section in settings file")
     
     settings = config['FTP']
-    required_settings = ['LOCAL_DIRECTORY', 'FTP_DIRECTORY', 'FTP_HOST', 'FTP_USER', 'FTP_PASS']
-    
+    required_settings = ['FTP_HOST', 'FTP_USER', 'FTP_PASS']
+
     for setting in required_settings:
         if setting not in settings:
             raise ValueError(f"Missing required setting: {setting}")
-    
+
     return {
-        'local_directory': settings['LOCAL_DIRECTORY'],
-        'ftp_directory': settings['FTP_DIRECTORY'],
+        'local_directory': settings.get('LOCAL_DIRECTORY', ''),
+        'ftp_directory': settings.get('FTP_DIRECTORY', ''),
         'ftp_host': settings['FTP_HOST'],
         'ftp_user': settings['FTP_USER'],
         'ftp_pass': settings['FTP_PASS'],
@@ -48,6 +48,8 @@ def load_settings(ini_file):
 def parse_arguments():
     parser = argparse.ArgumentParser(description='FTP Sync Tool')
     parser.add_argument('settings_file', help='Path to the settings INI file')
+    parser.add_argument('--local-dir', '-l', help='Override LOCAL_DIRECTORY from INI file')
+    parser.add_argument('--ftp-dir', '-f', help='Override FTP_DIRECTORY from INI file')
     return parser.parse_args()
 
 def get_ftp_files_recursive(ftp, path='.'):
@@ -134,27 +136,28 @@ def upload_file(args):
         
         local_file_path = os.path.join(settings['local_directory'], local_file)
         ftp_file_path = local_file.replace('\\', '/')
-        ftp_dir = os.path.dirname(ftp_file_path)
-        
+        ftp_base = settings['ftp_directory'].rstrip('/')
+        ftp_absolute_path = f"{ftp_base}/{ftp_file_path}"
+        ftp_dir = os.path.dirname(ftp_absolute_path)
+
         if ftp_dir:
             ensure_ftp_dir(ftp, ftp_dir)
-            ftp.cwd('/')  # Go back to root
 
         total_size = os.path.getsize(local_file_path)
 
         # Check if file exists and has the same size on FTP
         if local_file in ftp_files:
             try:
-                ftp_size = ftp.size(ftp_file_path)
+                ftp_size = ftp.size(ftp_absolute_path)
                 if ftp_size == total_size:
                     print(f'Skipping {local_file} (already exists with same size)')
-                    return None
+                    #return None
             except:
                 pass  # File doesn't exist or can't get size, proceed with upload
 
         print(f'Uploading {local_file}')
         with open(local_file_path, 'rb') as file:
-            ftp.storbinary(f'STOR {ftp_file_path}', file, 1024)
+            ftp.storbinary(f'STOR {ftp_absolute_path}', file, 1024)
         
         print(f'Completed upload of {local_file}')
         return local_file
@@ -242,6 +245,20 @@ def main():
     args = parse_arguments()
     settings = load_settings(args.settings_file)
 
+    # Apply CLI overrides
+    if args.local_dir:
+        settings['local_directory'] = args.local_dir
+    if args.ftp_dir:
+        settings['ftp_directory'] = args.ftp_dir
+
+    # Validate that directories are set from at least one source
+    if not settings['local_directory']:
+        print("Error: LOCAL_DIRECTORY must be set in INI file or via --local-dir argument")
+        sys.exit(1)
+    if not settings['ftp_directory']:
+        print("Error: FTP_DIRECTORY must be set in INI file or via --ftp-dir argument")
+        sys.exit(1)
+
     # Create local directory if it doesn't exist
     os.makedirs(settings['local_directory'], exist_ok=True)
 
@@ -249,7 +266,8 @@ def main():
     ftp = ftplib.FTP(settings['ftp_host'])
     ftp.login(settings['ftp_user'], settings['ftp_pass'])
 
-    # Change to the desired directory on FTP
+    # Change to the desired directory on FTP, creating it if needed
+    ensure_ftp_dir(ftp, settings['ftp_directory'])
     ftp.cwd(settings['ftp_directory'])
 
     # Get list of files recursively
