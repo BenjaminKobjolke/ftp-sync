@@ -15,13 +15,20 @@ VALID_DIRECTIONS = ("up", "down")
 class Settings:
     """FTP sync configuration settings."""
 
-    local_directory: str
+    local_directories: tuple[str, ...]
     ftp_directory: str
     ftp_host: str
     ftp_user: str
     ftp_pass: str
     direction: str = "down"
     concurrent_operations: int = 1
+
+
+def _parse_local_directories(raw: str) -> tuple[str, ...]:
+    """Parse a comma-separated list of local directories."""
+    if not raw:
+        return ()
+    return tuple(d.strip() for d in raw.split(",") if d.strip())
 
 
 def load_settings(ini_file: str) -> Settings:
@@ -47,8 +54,13 @@ def load_settings(ini_file: str) -> Settings:
     if concurrent_ops < 1:
         raise ValueError(f"CONCURRENT_UPLOADS_OR_DOWNLOADS must be >= 1, got {concurrent_ops}")
 
+    local_directories = _parse_local_directories(ftp_section.get("LOCAL_DIRECTORY", ""))
+
+    if len(local_directories) > 1 and direction != "up":
+        raise ValueError("Multiple LOCAL_DIRECTORY paths are only supported with DIRECTION = up")
+
     return Settings(
-        local_directory=ftp_section.get("LOCAL_DIRECTORY", ""),
+        local_directories=local_directories,
         ftp_directory=ftp_section.get("FTP_DIRECTORY", ""),
         ftp_host=ftp_section["FTP_HOST"],
         ftp_user=ftp_section["FTP_USER"],
@@ -62,7 +74,9 @@ def parse_arguments() -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="FTP Sync Tool")
     parser.add_argument("settings_file", help="Path to the settings INI file")
-    parser.add_argument("--local-dir", "-l", help="Override LOCAL_DIRECTORY from INI file")
+    parser.add_argument(
+        "--local-dir", "-l", help="Override LOCAL_DIRECTORY from INI file (comma-separated for multiple)"
+    )
     parser.add_argument("--ftp-dir", "-f", help="Override FTP_DIRECTORY from INI file")
     return parser.parse_args()
 
@@ -71,7 +85,7 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     """Apply CLI argument overrides to settings."""
     result = settings
     if args.local_dir:
-        result = replace(result, local_directory=args.local_dir)
+        result = replace(result, local_directories=_parse_local_directories(args.local_dir))
     if args.ftp_dir:
         result = replace(result, ftp_directory=args.ftp_dir)
     return result

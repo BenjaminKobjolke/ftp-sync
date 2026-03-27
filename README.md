@@ -9,6 +9,8 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Concurrent operations** — configurable number of parallel uploads/downloads
 - **Skip unchanged files** — files with matching sizes are skipped
 - **Old file handling** — when downloading, local files no longer on the server are moved to an `old` subfolder
+- **Multi-directory upload** — sync multiple local folders into one FTP directory (newer file wins on conflicts)
+- **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode)
 - **CLI overrides** — override `LOCAL_DIRECTORY` and `FTP_DIRECTORY` from the command line
 - **Auto-create FTP directories** — target FTP directory is created if it does not exist
 

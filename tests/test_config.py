@@ -14,7 +14,7 @@ class TestSettings:
 
     def test_settings_is_frozen(self) -> None:
         settings = Settings(
-            local_directory="local",
+            local_directories=("local",),
             ftp_directory="/remote",
             ftp_host="host",
             ftp_user="user",
@@ -25,7 +25,7 @@ class TestSettings:
 
     def test_settings_defaults(self) -> None:
         settings = Settings(
-            local_directory="local",
+            local_directories=("local",),
             ftp_directory="/remote",
             ftp_host="host",
             ftp_user="user",
@@ -81,7 +81,7 @@ class TestLoadSettings:
             "CONCURRENT_UPLOADS_OR_DOWNLOADS = 4\n"
         )
         settings = load_settings(str(ini_file))
-        assert settings.local_directory == "C:\\backup"
+        assert settings.local_directories == ("C:\\backup",)
         assert settings.ftp_directory == "/remote/path"
         assert settings.ftp_host == "ftp.example.com"
         assert settings.ftp_user == "admin"
@@ -93,10 +93,44 @@ class TestLoadSettings:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
         settings = load_settings(str(ini_file))
-        assert settings.local_directory == ""
+        assert settings.local_directories == ()
         assert settings.ftp_directory == ""
         assert settings.direction == "down"
         assert settings.concurrent_operations == 1
+
+    def test_comma_separated_local_directories(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\n"
+            "LOCAL_DIRECTORY = C:\\folder1, C:\\folder2\n"
+            "FTP_DIRECTORY = /remote\n"
+            "FTP_HOST = host\n"
+            "FTP_USER = user\n"
+            "FTP_PASS = pass\n"
+            "DIRECTION = up\n"
+        )
+        settings = load_settings(str(ini_file))
+        assert settings.local_directories == ("C:\\folder1", "C:\\folder2")
+
+    def test_single_local_directory_becomes_tuple(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nLOCAL_DIRECTORY = C:\\backup\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        settings = load_settings(str(ini_file))
+        assert settings.local_directories == ("C:\\backup",)
+
+    def test_multi_directory_with_direction_down_raises_error(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\n"
+            "LOCAL_DIRECTORY = C:\\a, C:\\b\n"
+            "FTP_DIRECTORY = /remote\n"
+            "FTP_HOST = host\n"
+            "FTP_USER = user\n"
+            "FTP_PASS = pass\n"
+            "DIRECTION = down\n"
+        )
+        with pytest.raises(ValueError, match="Multiple LOCAL_DIRECTORY.*only supported.*up"):
+            load_settings(str(ini_file))
 
 
 class TestApplyOverrides:
@@ -104,7 +138,7 @@ class TestApplyOverrides:
 
     def _base_settings(self) -> Settings:
         return Settings(
-            local_directory="original_local",
+            local_directories=("original_local",),
             ftp_directory="/original_remote",
             ftp_host="host",
             ftp_user="user",
@@ -121,19 +155,25 @@ class TestApplyOverrides:
         settings = self._base_settings()
         args = argparse.Namespace(local_dir="new_local", ftp_dir=None)
         result = apply_overrides(settings, args)
-        assert result.local_directory == "new_local"
+        assert result.local_directories == ("new_local",)
         assert result.ftp_directory == "/original_remote"
 
     def test_ftp_dir_override(self) -> None:
         settings = self._base_settings()
         args = argparse.Namespace(local_dir=None, ftp_dir="/new_remote")
         result = apply_overrides(settings, args)
-        assert result.local_directory == "original_local"
+        assert result.local_directories == ("original_local",)
         assert result.ftp_directory == "/new_remote"
 
     def test_both_overrides(self) -> None:
         settings = self._base_settings()
         args = argparse.Namespace(local_dir="new_local", ftp_dir="/new_remote")
         result = apply_overrides(settings, args)
-        assert result.local_directory == "new_local"
+        assert result.local_directories == ("new_local",)
         assert result.ftp_directory == "/new_remote"
+
+    def test_comma_separated_local_dir_override(self) -> None:
+        settings = self._base_settings()
+        args = argparse.Namespace(local_dir="C:\\a, C:\\b", ftp_dir=None)
+        result = apply_overrides(settings, args)
+        assert result.local_directories == ("C:\\a", "C:\\b")

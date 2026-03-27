@@ -80,19 +80,23 @@ def ensure_ftp_dir(ftp: ftplib.FTP, path: str) -> None:
                 ftp.mkd(current)
 
 
-def upload_file(args: tuple[str, Settings, list[str]]) -> str | None:
+def build_ftp_path(settings: Settings, relative_path: str) -> str:
+    """Build an absolute FTP path from a relative path."""
+    ftp_base = settings.ftp_directory.rstrip("/")
+    return f"{ftp_base}/{relative_path}"
+
+
+def upload_file(args: tuple[str, str, Settings, list[str]]) -> str | None:
     """Upload a single file to the FTP server."""
-    local_file, settings, ftp_files = args
+    local_file, local_file_path, settings, ftp_files = args
     if local_file in (".", ".."):
         return None
 
     try:
         ftp = get_ftp_connection(settings)
 
-        local_file_path = os.path.join(settings.local_directory, local_file)
         ftp_file_path = local_file.replace("\\", "/")
-        ftp_base = settings.ftp_directory.rstrip("/")
-        ftp_absolute_path = f"{ftp_base}/{ftp_file_path}"
+        ftp_absolute_path = build_ftp_path(settings, ftp_file_path)
         ftp_dir = os.path.dirname(ftp_absolute_path)
 
         if ftp_dir:
@@ -105,6 +109,7 @@ def upload_file(args: tuple[str, Settings, list[str]]) -> str | None:
                 ftp_size = ftp.size(ftp_absolute_path)
                 if ftp_size == total_size:
                     logger.info("Skipping %s (already exists with same size)", local_file)
+                    return local_file
             except (ftplib.error_perm, ftplib.error_temp):
                 pass
 
@@ -128,7 +133,7 @@ def download_file(args: tuple[str, Settings, list[str]]) -> str | None:
     try:
         ftp = get_ftp_connection(settings)
 
-        local_file_path = os.path.join(settings.local_directory, ftp_file)
+        local_file_path = os.path.join(settings.local_directories[0], ftp_file)
         local_dir = os.path.dirname(local_file_path)
         ensure_local_dir(local_dir)
 
@@ -153,3 +158,34 @@ def download_file(args: tuple[str, Settings, list[str]]) -> str | None:
     except Exception:
         logger.exception("Error downloading %s", ftp_file)
         return None
+
+
+def delete_ftp_file(ftp: ftplib.FTP, settings: Settings, relative_path: str) -> bool:
+    """Delete a single file from the FTP server."""
+    ftp_absolute_path = build_ftp_path(settings, relative_path)
+    try:
+        ftp.delete(ftp_absolute_path)
+        logger.info("Deleted FTP file: %s", relative_path)
+        return True
+    except ftplib.error_perm:
+        logger.warning("Could not delete FTP file: %s", relative_path)
+        return False
+
+
+def delete_ftp_files(settings: Settings, ftp_files: list[str], local_files: set[str]) -> int:
+    """Delete FTP files that are not present in any local directory."""
+    to_delete = [f for f in ftp_files if f not in local_files]
+    if not to_delete:
+        logger.info("No FTP files to delete.")
+        return 0
+
+    logger.info("Deleting %d files from FTP that are no longer in any local directory...", len(to_delete))
+    deleted_count = 0
+
+    ftp = get_ftp_connection(settings)
+    for rel_path in to_delete:
+        if delete_ftp_file(ftp, settings, rel_path):
+            deleted_count += 1
+
+    logger.info("Deleted %d files from FTP.", deleted_count)
+    return deleted_count
