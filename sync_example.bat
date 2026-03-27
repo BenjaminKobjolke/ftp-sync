@@ -1,1 +1,1 @@
-python main.py settings_example.ini
+uv run python main.py settings_example.ini

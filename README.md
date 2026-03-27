@@ -15,25 +15,26 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Install
 
 - Make sure you have Python 3.11+ installed
-- `pip install -r requirements.txt`
+- Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- Run `install.bat` or `uv sync --all-extras`
 - Copy `settings_example.ini` and fill in the required fields
 
 ## Usage
 
 ```
-python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>]
 ```
 
 ### Examples
 
 Basic usage with INI file:
 ```
-python main.py settings.ini
+uv run python main.py settings.ini
 ```
 
 Override directories via CLI:
 ```
-python main.py settings.ini --local-dir "C:\my\local\folder" --ftp-dir "/remote/path"
+uv run python main.py settings.ini --local-dir "C:\my\local\folder" --ftp-dir "/remote/path"
 ```
 
 ### INI file format
@@ -54,3 +55,16 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.
+
+## Development
+
+```bash
+# Initial setup
+install.bat
+
+# Run tests
+tools\run_tests.bat
+
+# Update dependencies
+update.bat
+```
