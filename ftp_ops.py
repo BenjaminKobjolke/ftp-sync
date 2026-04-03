@@ -1,5 +1,6 @@
 """FTP connection management and file operations."""
 
+import contextlib
 import ftplib
 import logging
 import os
@@ -24,7 +25,11 @@ def get_ftp_connection(settings: Settings) -> ftplib.FTP:
     return ftp_conn
 
 
-def get_ftp_files_recursive(ftp: ftplib.FTP, path: str = ".") -> list[str]:
+def get_ftp_files_recursive(
+    ftp: ftplib.FTP,
+    path: str = ".",
+    ignore_dirs: tuple[str, ...] = (),
+) -> list[str]:
     """Recursively list files on the FTP server."""
     files: list[str] = []
     try:
@@ -38,8 +43,11 @@ def get_ftp_files_recursive(ftp: ftplib.FTP, path: str = ".") -> list[str]:
             try:
                 ftp.cwd(item)
                 ftp.cwd("..")
+                if item in ignore_dirs:
+                    logger.debug("Skipping ignored FTP directory: %s", item)
+                    continue
                 subpath = os.path.join(path, item).replace("\\", "/")
-                files.extend(get_ftp_files_recursive(ftp, subpath))
+                files.extend(get_ftp_files_recursive(ftp, subpath, ignore_dirs))
             except ftplib.error_perm:
                 file_path = os.path.join(path, item).replace("\\", "/")
                 if path == ".":
@@ -77,7 +85,8 @@ def ensure_ftp_dir(ftp: ftplib.FTP, path: str) -> None:
             try:
                 ftp.cwd(current)
             except ftplib.error_perm:
-                ftp.mkd(current)
+                with contextlib.suppress(ftplib.error_perm):
+                    ftp.mkd(current)
 
 
 def build_ftp_path(settings: Settings, relative_path: str) -> str:
@@ -86,7 +95,7 @@ def build_ftp_path(settings: Settings, relative_path: str) -> str:
     return f"{ftp_base}/{relative_path}"
 
 
-def upload_file(args: tuple[str, str, Settings, list[str]]) -> str | None:
+def upload_file(args: tuple[str, str, Settings, list[str] | None]) -> str | None:
     """Upload a single file to the FTP server."""
     local_file, local_file_path, settings, ftp_files = args
     if local_file in (".", ".."):
@@ -104,7 +113,7 @@ def upload_file(args: tuple[str, str, Settings, list[str]]) -> str | None:
 
         total_size = os.path.getsize(local_file_path)
 
-        if local_file in ftp_files:
+        if ftp_files is not None and local_file in ftp_files:
             try:
                 ftp_size = ftp.size(ftp_absolute_path)
                 if ftp_size == total_size:

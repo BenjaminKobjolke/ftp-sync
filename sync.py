@@ -15,10 +15,16 @@ logger = logging.getLogger(__name__)
 MergedFileMap = dict[str, str]
 
 
-def get_local_files_recursive(local_dir: str, base_dir: str | None = None) -> list[str]:
+def get_local_files_recursive(
+    local_dir: str,
+    base_dir: str | None = None,
+    ignore_dirs: tuple[str, ...] = (),
+) -> list[str]:
     """Recursively list files in a local directory."""
     if base_dir is None:
         base_dir = local_dir
+
+    skip = set(ignore_dirs) | {"old"}
 
     files: list[str] = []
     for item in os.listdir(local_dir):
@@ -26,12 +32,15 @@ def get_local_files_recursive(local_dir: str, base_dir: str | None = None) -> li
         if os.path.isfile(full_path):
             rel_path = os.path.relpath(full_path, base_dir).replace("\\", "/")
             files.append(rel_path)
-        elif os.path.isdir(full_path) and item != "old":
-            files.extend(get_local_files_recursive(full_path, base_dir))
+        elif os.path.isdir(full_path) and item not in skip:
+            files.extend(get_local_files_recursive(full_path, base_dir, ignore_dirs))
     return files
 
 
-def build_merged_file_map(local_directories: tuple[str, ...]) -> MergedFileMap:
+def build_merged_file_map(
+    local_directories: tuple[str, ...],
+    ignore_dirs: tuple[str, ...] = (),
+) -> MergedFileMap:
     """Build a merged map of relative_path -> absolute_local_path from multiple directories.
 
     When a file exists at the same relative path in multiple directories,
@@ -41,7 +50,7 @@ def build_merged_file_map(local_directories: tuple[str, ...]) -> MergedFileMap:
     mtimes: dict[str, float] = {}
 
     for local_dir in local_directories:
-        for rel_path in get_local_files_recursive(local_dir):
+        for rel_path in get_local_files_recursive(local_dir, ignore_dirs=ignore_dirs):
             abs_path = os.path.join(local_dir, rel_path)
             mtime = os.path.getmtime(abs_path)
 

@@ -97,6 +97,19 @@ class TestLoadSettings:
         assert settings.ftp_directory == ""
         assert settings.direction == "down"
         assert settings.concurrent_operations == 1
+        assert settings.hash_cache_file == ""
+
+    def test_hash_cache_file_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\n"
+            "FTP_HOST = host\n"
+            "FTP_USER = user\n"
+            "FTP_PASS = pass\n"
+            "HASH_CACHE_FILE = C:\\cache\\sync.db\n"
+        )
+        settings = load_settings(str(ini_file))
+        assert settings.hash_cache_file == "C:\\cache\\sync.db"
 
     def test_comma_separated_local_directories(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
@@ -117,6 +130,24 @@ class TestLoadSettings:
         ini_file.write_text("[FTP]\nLOCAL_DIRECTORY = C:\\backup\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
         settings = load_settings(str(ini_file))
         assert settings.local_directories == ("C:\\backup",)
+
+    def test_ignore_dirs_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\n"
+            "FTP_HOST = host\n"
+            "FTP_USER = user\n"
+            "FTP_PASS = pass\n"
+            "IGNORE_DIRS = _old, _alt, Unsortiert\n"
+        )
+        settings = load_settings(str(ini_file))
+        assert settings.ignore_dirs == ("_old", "_alt", "Unsortiert")
+
+    def test_ignore_dirs_defaults_to_empty(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        settings = load_settings(str(ini_file))
+        assert settings.ignore_dirs == ()
 
     def test_multi_directory_with_direction_down_raises_error(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"

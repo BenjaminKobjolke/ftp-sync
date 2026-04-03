@@ -22,10 +22,12 @@ class Settings:
     ftp_pass: str
     direction: str = "down"
     concurrent_operations: int = 1
+    ignore_dirs: tuple[str, ...] = ()
+    hash_cache_file: str = ""
 
 
-def _parse_local_directories(raw: str) -> tuple[str, ...]:
-    """Parse a comma-separated list of local directories."""
+def _parse_comma_list(raw: str) -> tuple[str, ...]:
+    """Parse a comma-separated list into a tuple of stripped, non-empty strings."""
     if not raw:
         return ()
     return tuple(d.strip() for d in raw.split(",") if d.strip())
@@ -54,7 +56,8 @@ def load_settings(ini_file: str) -> Settings:
     if concurrent_ops < 1:
         raise ValueError(f"CONCURRENT_UPLOADS_OR_DOWNLOADS must be >= 1, got {concurrent_ops}")
 
-    local_directories = _parse_local_directories(ftp_section.get("LOCAL_DIRECTORY", ""))
+    local_directories = _parse_comma_list(ftp_section.get("LOCAL_DIRECTORY", ""))
+    ignore_dirs = _parse_comma_list(ftp_section.get("IGNORE_DIRS", ""))
 
     if len(local_directories) > 1 and direction != "up":
         raise ValueError("Multiple LOCAL_DIRECTORY paths are only supported with DIRECTION = up")
@@ -67,6 +70,8 @@ def load_settings(ini_file: str) -> Settings:
         ftp_pass=ftp_section["FTP_PASS"],
         direction=direction,
         concurrent_operations=concurrent_ops,
+        ignore_dirs=ignore_dirs,
+        hash_cache_file=ftp_section.get("HASH_CACHE_FILE", ""),
     )
 
 
@@ -78,6 +83,7 @@ def parse_arguments() -> argparse.Namespace:
         "--local-dir", "-l", help="Override LOCAL_DIRECTORY from INI file (comma-separated for multiple)"
     )
     parser.add_argument("--ftp-dir", "-f", help="Override FTP_DIRECTORY from INI file")
+    parser.add_argument("--resync", action="store_true", help="Clear hash cache and re-upload all files")
     return parser.parse_args()
 
 
@@ -85,7 +91,7 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     """Apply CLI argument overrides to settings."""
     result = settings
     if args.local_dir:
-        result = replace(result, local_directories=_parse_local_directories(args.local_dir))
+        result = replace(result, local_directories=_parse_comma_list(args.local_dir))
     if args.ftp_dir:
         result = replace(result, ftp_directory=args.ftp_dir)
     return result

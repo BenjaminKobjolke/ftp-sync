@@ -4,7 +4,9 @@ version = "1.0.0"
 description = "Sync a local folder with an FTP folder"
 requires-python = ">=3.11"
 license = {text = "MIT"}
-dependencies = []
+dependencies = [
+    "sqlalchemy>=2.0.48",
+]
 
 [dependency-groups]
 dev = [
