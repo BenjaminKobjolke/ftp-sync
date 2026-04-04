@@ -7,7 +7,10 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+import pathspec
+
 from config import Settings
+from deployignore import load_deployignore
 from ftp_ops import ensure_local_dir
 
 logger = logging.getLogger(__name__)
@@ -19,6 +22,7 @@ def get_local_files_recursive(
     local_dir: str,
     base_dir: str | None = None,
     ignore_dirs: tuple[str, ...] = (),
+    deploy_spec: pathspec.PathSpec | None = None,
 ) -> list[str]:
     """Recursively list files in a local directory."""
     if base_dir is None:
@@ -31,15 +35,25 @@ def get_local_files_recursive(
         full_path = os.path.join(local_dir, item)
         if os.path.isfile(full_path):
             rel_path = os.path.relpath(full_path, base_dir).replace("\\", "/")
+            if deploy_spec and deploy_spec.match_file(rel_path):
+                logger.debug("Skipping ignored file: %s", rel_path)
+                continue
             files.append(rel_path)
         elif os.path.isdir(full_path) and item not in skip:
-            files.extend(get_local_files_recursive(full_path, base_dir, ignore_dirs))
+            dir_rel_path = os.path.relpath(full_path, base_dir).replace("\\", "/")
+            if deploy_spec and deploy_spec.match_file(dir_rel_path + "/"):
+                logger.debug("Skipping ignored directory: %s", dir_rel_path)
+                continue
+            files.extend(
+                get_local_files_recursive(full_path, base_dir, ignore_dirs, deploy_spec)
+            )
     return files
 
 
 def build_merged_file_map(
     local_directories: tuple[str, ...],
     ignore_dirs: tuple[str, ...] = (),
+    extra_ignore_patterns: tuple[str, ...] = (),
 ) -> MergedFileMap:
     """Build a merged map of relative_path -> absolute_local_path from multiple directories.
 
@@ -50,7 +64,10 @@ def build_merged_file_map(
     mtimes: dict[str, float] = {}
 
     for local_dir in local_directories:
-        for rel_path in get_local_files_recursive(local_dir, ignore_dirs=ignore_dirs):
+        deploy_spec = load_deployignore(local_dir, extra_ignore_patterns)
+        for rel_path in get_local_files_recursive(
+            local_dir, ignore_dirs=ignore_dirs, deploy_spec=deploy_spec
+        ):
             abs_path = os.path.join(local_dir, rel_path)
             mtime = os.path.getmtime(abs_path)
 

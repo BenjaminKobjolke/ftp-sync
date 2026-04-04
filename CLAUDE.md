@@ -9,7 +9,7 @@ FTP sync CLI tool — syncs a local folder with an FTP folder. Supports bidirect
 - Use **uv** for dependency management
 - `pyproject.toml` is the single source of truth for dependencies and tool config
 - Commit `uv.lock` for reproducible installs
-- Runtime dependency: SQLAlchemy (hash cache database)
+- Runtime dependencies: SQLAlchemy (hash cache database), pathspec (deployignore pattern matching)
 
 ## Project Structure
 
@@ -17,7 +17,9 @@ FTP sync CLI tool — syncs a local folder with an FTP folder. Supports bidirect
 ftp-sync/
 ├── main.py           # Entry point, logging setup, orchestration
 ├── config.py         # Settings dataclass, INI loading, CLI parsing
-├── ftp_ops.py        # FTP connection, file listing, upload, download
+├── deployignore.py   # .deployignore loading and path filtering
+├── ftp_ops.py        # FTP/FTPS connection, file listing, upload, download
+├── php_config.py     # PHP deploy config parser (deploy-tool format)
 ├── sync.py           # Sync orchestration, local file listing, old file handling
 ├── tests/
 │   └── test_config.py

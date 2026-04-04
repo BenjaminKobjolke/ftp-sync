@@ -13,6 +13,9 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Multi-directory upload** — sync multiple local folders into one FTP directory (newer file wins on conflicts)
 - **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode)
 - **Ignore directories** — configurable list of directory names to skip during sync (both directions)
+- **`.deployignore`** — gitignore-style file placed in synced directories to exclude files/folders from sync
+- **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
+- **FTP and FTPS** — plain FTP and FTPS (FTP over TLS) connections
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
 - **CLI overrides** — override `LOCAL_DIRECTORY` and `FTP_DIRECTORY` from the command line
 - **Auto-create FTP directories** — target FTP directory is created if it does not exist
@@ -73,6 +76,36 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.
+
+### PHP deploy config format
+
+As an alternative to INI files, you can use PHP config files from the deploy-tool. See `tools/config_example.php` for the format.
+
+```
+uv run python main.py config_myapp.php --local-dir "C:\my\local\folder"
+```
+
+- `--local-dir` is required when using a PHP config
+- All entries in the config are processed sequentially
+- Ignore patterns from `git.ignore` / `svn.ignore` are applied automatically
+- Supports FTP and FTPS transfer types (SFTP is not supported)
+- Preset inheritance is supported via `preset_<name>.php` files in the same directory
+
+### `.deployignore`
+
+Place a `.deployignore` file in the root of any synced directory to exclude files and folders. Uses `.gitignore` syntax:
+
+```
+# Exclude docs and test files
+docs/
+tests/
+*.log
+
+# But keep important.log
+!important.log
+```
+
+The `.deployignore` file itself is always excluded from sync. Patterns from `.deployignore` are combined with ignore patterns from PHP config files when both are present.
 
 ## Development
 

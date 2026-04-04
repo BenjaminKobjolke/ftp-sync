@@ -17,8 +17,16 @@ def get_ftp_connection(settings: Settings) -> ftplib.FTP:
     """Create or get a thread-local FTP connection."""
     ftp_conn: ftplib.FTP | None = getattr(_thread_local, "ftp", None)
     if ftp_conn is None:
-        ftp_conn = ftplib.FTP(settings.ftp_host)
-        ftp_conn.login(settings.ftp_user, settings.ftp_pass)
+        port = settings.ftp_port or 21
+        if settings.transfer_type == "FTPS":
+            ftp_conn = ftplib.FTP_TLS()
+            ftp_conn.connect(settings.ftp_host, port)
+            ftp_conn.login(settings.ftp_user, settings.ftp_pass)
+            ftp_conn.prot_p()
+        else:
+            ftp_conn = ftplib.FTP()
+            ftp_conn.connect(settings.ftp_host, port)
+            ftp_conn.login(settings.ftp_user, settings.ftp_pass)
         if settings.ftp_directory:
             ftp_conn.cwd(settings.ftp_directory)
         _thread_local.ftp = ftp_conn
@@ -179,6 +187,27 @@ def delete_ftp_file(ftp: ftplib.FTP, settings: Settings, relative_path: str) -> 
     except ftplib.error_perm:
         logger.warning("Could not delete FTP file: %s", relative_path)
         return False
+
+
+def remove_empty_ftp_dirs(ftp: ftplib.FTP, settings: Settings, deleted_paths: list[str]) -> None:
+    """Try to remove FTP directories that were emptied by file deletions.
+
+    Collects parent directories of deleted files and attempts removal
+    deepest-first. Silently skips non-empty or non-existent directories.
+    """
+    dirs: set[str] = set()
+    for path in deleted_paths:
+        parts = path.replace("\\", "/").split("/")
+        for i in range(1, len(parts)):
+            dirs.add("/".join(parts[:i]))
+
+    for d in sorted(dirs, key=lambda x: x.count("/"), reverse=True):
+        ftp_abs = build_ftp_path(settings, d)
+        try:
+            ftp.rmd(ftp_abs)
+            logger.info("Removed empty FTP directory: %s", d)
+        except ftplib.error_perm:
+            pass
 
 
 def delete_ftp_files(settings: Settings, ftp_files: list[str], local_files: set[str]) -> int:

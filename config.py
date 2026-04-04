@@ -24,6 +24,8 @@ class Settings:
     concurrent_operations: int = 1
     ignore_dirs: tuple[str, ...] = ()
     hash_cache_file: str = ""
+    transfer_type: str = "FTP"
+    ftp_port: int = 0
 
 
 def _parse_comma_list(raw: str) -> tuple[str, ...]:
@@ -95,3 +97,27 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     if args.ftp_dir:
         result = replace(result, ftp_directory=args.ftp_dir)
     return result
+
+
+def settings_from_php_entry(
+    ftp_host: str,
+    ftp_user: str,
+    ftp_pass: str,
+    ftp_directory: str,
+    local_directories: tuple[str, ...],
+    transfer_type: str = "FTP",
+    ftp_port: int = 0,
+    hash_cache_file: str = "",
+) -> Settings:
+    """Create Settings from PHP deploy config entry values."""
+    return Settings(
+        local_directories=local_directories,
+        ftp_directory=ftp_directory,
+        ftp_host=ftp_host,
+        ftp_user=ftp_user,
+        ftp_pass=ftp_pass,
+        direction="up",
+        transfer_type=transfer_type,
+        ftp_port=ftp_port,
+        hash_cache_file=hash_cache_file,
+    )
