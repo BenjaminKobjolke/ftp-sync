@@ -24,6 +24,7 @@ from ftp_ops import (
 from hash_db import delete_paths, filter_changed_files, find_deleted_paths, open_hash_db, upsert_hashes
 from php_config import parse_php_config
 from sync import build_merged_file_map, get_local_files_recursive, handle_old_files, sync_files
+from watcher import watch_and_sync
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,9 @@ def _run_php_config(args: object) -> None:
     from config import _parse_comma_list
 
     local_directories = _parse_comma_list(local_dir)
+    watcher_mode = getattr(args, "watcher", False)
+
+    sync_configs: list[tuple[Settings, tuple[str, ...]]] = []
 
     for entry in entries:
         logger.info("=== Processing: %s ===", entry.name)
@@ -115,6 +119,17 @@ def _run_php_config(args: object) -> None:
         )
 
         _run_sync(settings, extra_ignore, resync=getattr(args, "resync", False))
+        sync_configs.append((settings, extra_ignore))
+
+    if watcher_mode and sync_configs:
+        def sync_all() -> None:
+            for s, e in sync_configs:
+                _run_sync(s, e, resync=False)
+
+        watch_dirs: set[str] = set()
+        for s, _ in sync_configs:
+            watch_dirs.update(s.local_directories)
+        watch_and_sync(tuple(watch_dirs), sync_all, {"old", ".git"})
 
 
 def _run_ini_config(args: object) -> None:
@@ -122,6 +137,14 @@ def _run_ini_config(args: object) -> None:
     settings = load_settings(args.settings_file)  # type: ignore[attr-defined]
     settings = apply_overrides(settings, args)  # type: ignore[arg-type]
     _run_sync(settings, (), resync=getattr(args, "resync", False))
+
+    if getattr(args, "watcher", False):
+        ignore = set(settings.ignore_dirs) | {"old", ".git"}
+        watch_and_sync(
+            settings.local_directories,
+            lambda: _run_sync(settings, (), resync=False),
+            ignore,
+        )
 
 
 def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync: bool) -> None:

@@ -86,6 +86,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--ftp-dir", "-f", help="Override FTP_DIRECTORY from INI file")
     parser.add_argument("--resync", action="store_true", help="Clear hash cache and re-upload all files")
+    parser.add_argument("--watcher", "-w", action="store_true", help="Watch for file changes and sync automatically")
     return parser.parse_args()
 
 

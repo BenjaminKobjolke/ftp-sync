@@ -16,6 +16,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **`.deployignore`** — gitignore-style file placed in synced directories to exclude files/folders from sync
 - **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
 - **FTP and FTPS** — plain FTP and FTPS (FTP over TLS) connections
+- **Watcher mode** — `--watcher` watches local files for changes and auto-syncs to FTP (2s debounce)
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
 - **CLI overrides** — override `LOCAL_DIRECTORY` and `FTP_DIRECTORY` from the command line
 - **Auto-create FTP directories** — target FTP directory is created if it does not exist
@@ -30,7 +31,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--resync]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--resync] [--watcher]
 ```
 
 ### Examples
@@ -43,6 +44,12 @@ uv run python main.py settings.ini
 Override directories via CLI:
 ```
 uv run python main.py settings.ini --local-dir "C:\my\local\folder" --ftp-dir "/remote/path"
+```
+
+Watch for changes and auto-sync:
+```
+uv run python main.py settings.ini --watcher
+uv run python main.py config_myapp.php --local-dir ./myproject --watcher
 ```
 
 Force full re-upload by clearing the hash cache:
