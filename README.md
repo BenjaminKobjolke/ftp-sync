@@ -17,6 +17,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
 - **FTP and FTPS** — plain FTP and FTPS (FTP over TLS) connections
 - **Watcher mode** — `--watcher` watches local files for changes and auto-syncs to FTP (2s debounce)
+- **Source retention cleanup** — optionally delete source files older than N days after sync (e.g., download from FTP, then purge FTP files older than 30 days)
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
 - **CLI overrides** — override `LOCAL_DIRECTORY` and `FTP_DIRECTORY` from the command line
 - **Auto-create FTP directories** — target FTP directory is created if it does not exist
@@ -31,7 +32,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--resync] [--watcher]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--resync] [--watcher] [--delete-source-after-days N]
 ```
 
 ### Examples
@@ -50,6 +51,11 @@ Watch for changes and auto-sync:
 ```
 uv run python main.py settings.ini --watcher
 uv run python main.py config_myapp.php --local-dir ./myproject --watcher
+```
+
+Download and delete FTP files older than 30 days:
+```
+uv run python main.py settings.ini --delete-source-after-days 30
 ```
 
 Force full re-upload by clearing the hash cache:
@@ -80,6 +86,10 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 # Path to SQLite hash cache file for tracking local file changes (upload only)
 # When set, skips FTP scanning and only uploads files whose content has changed
 # HASH_CACHE_FILE = c:\ftp_backup\.ftp_sync_cache.db
+
+# Delete source files older than N days after sync (default: 0 = disabled)
+# When DIRECTION = down, deletes files from FTP older than this many days
+# DELETE_SOURCE_AFTER_DAYS = 30
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.

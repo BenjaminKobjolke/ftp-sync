@@ -26,6 +26,7 @@ class Settings:
     hash_cache_file: str = ""
     transfer_type: str = "FTP"
     ftp_port: int = 0
+    delete_source_after_days: int = 0
 
 
 def _parse_comma_list(raw: str) -> tuple[str, ...]:
@@ -33,6 +34,14 @@ def _parse_comma_list(raw: str) -> tuple[str, ...]:
     if not raw:
         return ()
     return tuple(d.strip() for d in raw.split(",") if d.strip())
+
+
+def _parse_delete_source_after_days(ftp_section: configparser.SectionProxy) -> int:
+    """Parse and validate DELETE_SOURCE_AFTER_DAYS from INI section."""
+    value = int(ftp_section.get("DELETE_SOURCE_AFTER_DAYS", "0"))
+    if value < 0:
+        raise ValueError(f"DELETE_SOURCE_AFTER_DAYS must be >= 0, got {value}")
+    return value
 
 
 def load_settings(ini_file: str) -> Settings:
@@ -74,6 +83,7 @@ def load_settings(ini_file: str) -> Settings:
         concurrent_operations=concurrent_ops,
         ignore_dirs=ignore_dirs,
         hash_cache_file=ftp_section.get("HASH_CACHE_FILE", ""),
+        delete_source_after_days=_parse_delete_source_after_days(ftp_section),
     )
 
 
@@ -87,6 +97,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--ftp-dir", "-f", help="Override FTP_DIRECTORY from INI file")
     parser.add_argument("--resync", action="store_true", help="Clear hash cache and re-upload all files")
     parser.add_argument("--watcher", "-w", action="store_true", help="Watch for file changes and sync automatically")
+    parser.add_argument(
+        "--delete-source-after-days", type=int, default=None,
+        help="Delete source files older than N days after sync (0=disabled)",
+    )
     return parser.parse_args()
 
 
@@ -97,6 +111,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         result = replace(result, local_directories=_parse_comma_list(args.local_dir))
     if args.ftp_dir:
         result = replace(result, ftp_directory=args.ftp_dir)
+    if args.delete_source_after_days is not None:
+        result = replace(result, delete_source_after_days=args.delete_source_after_days)
     return result
 
 

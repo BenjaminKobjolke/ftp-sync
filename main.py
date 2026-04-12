@@ -15,6 +15,7 @@ from deployignore import (
 from ftp_ops import (
     delete_ftp_file,
     delete_ftp_files,
+    delete_old_ftp_files,
     download_file,
     ensure_ftp_dir,
     get_ftp_files_recursive,
@@ -182,6 +183,9 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
                 _upload_with_hash_cache(settings, merged_files, ftp)
             else:
                 _upload_with_ftp_scan(settings, merged_files, ftp)
+
+            if settings.delete_source_after_days > 0:
+                logger.warning("DELETE_SOURCE_AFTER_DAYS is not yet supported for upload direction")
         else:
             logger.info("Getting file lists...")
             deploy_spec = load_deployignore(settings.local_directories[0], extra_ignore_patterns)
@@ -196,6 +200,17 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
             download_args = [(f, settings, local_files) for f in ftp_files]
             completed_files = sync_files(settings, download_file, download_args)
             handle_old_files(settings, completed_files, local_files)
+
+            if settings.delete_source_after_days > 0:
+                logger.info(
+                    "Checking for FTP source files older than %d days...",
+                    settings.delete_source_after_days,
+                )
+                deleted_count = delete_old_ftp_files(
+                    ftp, settings, ftp_files, settings.delete_source_after_days
+                )
+                if deleted_count:
+                    logger.info("Source cleanup: deleted %d old files from FTP", deleted_count)
     finally:
         ftp.quit()
 

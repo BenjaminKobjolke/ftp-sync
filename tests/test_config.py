@@ -98,6 +98,7 @@ class TestLoadSettings:
         assert settings.direction == "down"
         assert settings.concurrent_operations == 1
         assert settings.hash_cache_file == ""
+        assert settings.delete_source_after_days == 0
 
     def test_hash_cache_file_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
@@ -149,6 +150,24 @@ class TestLoadSettings:
         settings = load_settings(str(ini_file))
         assert settings.ignore_dirs == ()
 
+    def test_delete_source_after_days_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n"
+            "DELETE_SOURCE_AFTER_DAYS = 30\n"
+        )
+        settings = load_settings(str(ini_file))
+        assert settings.delete_source_after_days == 30
+
+    def test_delete_source_after_days_negative_raises_error(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n"
+            "DELETE_SOURCE_AFTER_DAYS = -1\n"
+        )
+        with pytest.raises(ValueError, match="DELETE_SOURCE_AFTER_DAYS must be >= 0"):
+            load_settings(str(ini_file))
+
     def test_multi_directory_with_direction_down_raises_error(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text(
@@ -178,33 +197,39 @@ class TestApplyOverrides:
 
     def test_no_overrides(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir=None, ftp_dir=None)
+        args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=None)
         result = apply_overrides(settings, args)
         assert result is settings
 
     def test_local_dir_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir="new_local", ftp_dir=None)
+        args = argparse.Namespace(local_dir="new_local", ftp_dir=None, delete_source_after_days=None)
         result = apply_overrides(settings, args)
         assert result.local_directories == ("new_local",)
         assert result.ftp_directory == "/original_remote"
 
     def test_ftp_dir_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir=None, ftp_dir="/new_remote")
+        args = argparse.Namespace(local_dir=None, ftp_dir="/new_remote", delete_source_after_days=None)
         result = apply_overrides(settings, args)
         assert result.local_directories == ("original_local",)
         assert result.ftp_directory == "/new_remote"
 
     def test_both_overrides(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir="new_local", ftp_dir="/new_remote")
+        args = argparse.Namespace(local_dir="new_local", ftp_dir="/new_remote", delete_source_after_days=None)
         result = apply_overrides(settings, args)
         assert result.local_directories == ("new_local",)
         assert result.ftp_directory == "/new_remote"
 
     def test_comma_separated_local_dir_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir="C:\\a, C:\\b", ftp_dir=None)
+        args = argparse.Namespace(local_dir="C:\\a, C:\\b", ftp_dir=None, delete_source_after_days=None)
         result = apply_overrides(settings, args)
         assert result.local_directories == ("C:\\a", "C:\\b")
+
+    def test_delete_source_after_days_override(self) -> None:
+        settings = self._base_settings()
+        args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=45)
+        result = apply_overrides(settings, args)
+        assert result.delete_source_after_days == 45
