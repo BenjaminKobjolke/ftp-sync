@@ -197,39 +197,62 @@ class TestApplyOverrides:
 
     def test_no_overrides(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=None)
+        args = argparse.Namespace(
+            local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None
+        )
         result = apply_overrides(settings, args)
         assert result is settings
 
     def test_local_dir_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir="new_local", ftp_dir=None, delete_source_after_days=None)
+        args = argparse.Namespace(
+            local_dir="new_local", ftp_dir=None, delete_source_after_days=None, hash_cache_file=None
+        )
         result = apply_overrides(settings, args)
         assert result.local_directories == ("new_local",)
         assert result.ftp_directory == "/original_remote"
 
     def test_ftp_dir_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir=None, ftp_dir="/new_remote", delete_source_after_days=None)
+        args = argparse.Namespace(
+            local_dir=None, ftp_dir="/new_remote", delete_source_after_days=None, hash_cache_file=None
+        )
         result = apply_overrides(settings, args)
         assert result.local_directories == ("original_local",)
         assert result.ftp_directory == "/new_remote"
 
     def test_both_overrides(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir="new_local", ftp_dir="/new_remote", delete_source_after_days=None)
+        args = argparse.Namespace(
+            local_dir="new_local", ftp_dir="/new_remote", delete_source_after_days=None, hash_cache_file=None
+        )
         result = apply_overrides(settings, args)
         assert result.local_directories == ("new_local",)
         assert result.ftp_directory == "/new_remote"
 
     def test_comma_separated_local_dir_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir="C:\\a, C:\\b", ftp_dir=None, delete_source_after_days=None)
+        args = argparse.Namespace(
+            local_dir="C:\\a, C:\\b", ftp_dir=None, delete_source_after_days=None, hash_cache_file=None
+        )
         result = apply_overrides(settings, args)
         assert result.local_directories == ("C:\\a", "C:\\b")
 
     def test_delete_source_after_days_override(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=45)
+        args = argparse.Namespace(
+            local_dir=None, ftp_dir=None, delete_source_after_days=45, hash_cache_file=None
+        )
         result = apply_overrides(settings, args)
         assert result.delete_source_after_days == 45
+
+    def test_hash_cache_file_override(self) -> None:
+        settings = self._base_settings()
+        args = argparse.Namespace(
+            local_dir=None,
+            ftp_dir=None,
+            delete_source_after_days=None,
+            hash_cache_file="C:\\new\\cache.db",
+        )
+        result = apply_overrides(settings, args)
+        assert result.hash_cache_file == "C:\\new\\cache.db"

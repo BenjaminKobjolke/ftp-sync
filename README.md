@@ -19,7 +19,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Watcher mode** — `--watcher` watches local files for changes and auto-syncs to FTP (2s debounce)
 - **Source retention cleanup** — optionally delete source files older than N days after sync (e.g., download from FTP, then purge FTP files older than 30 days)
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
-- **CLI overrides** — override `LOCAL_DIRECTORY` and `FTP_DIRECTORY` from the command line
+- **CLI overrides** — override `LOCAL_DIRECTORY`, `FTP_DIRECTORY`, and `HASH_CACHE_FILE` from the command line
 - **Auto-create FTP directories** — target FTP directory is created if it does not exist
 
 ## Install
@@ -32,7 +32,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--resync] [--watcher] [--delete-source-after-days N]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--resync] [--watcher] [--delete-source-after-days N]
 ```
 
 ### Examples
@@ -61,6 +61,11 @@ uv run python main.py settings.ini --delete-source-after-days 30
 Force full re-upload by clearing the hash cache:
 ```
 uv run python main.py settings.ini --resync
+```
+
+Use a custom hash cache file location (overrides `HASH_CACHE_FILE` from INI):
+```
+uv run python main.py settings.ini --hash-cache-file "C:\caches\app-vendor.db"
 ```
 
 ### INI file format

@@ -101,6 +101,10 @@ def parse_arguments() -> argparse.Namespace:
         "--delete-source-after-days", type=int, default=None,
         help="Delete source files older than N days after sync (0=disabled)",
     )
+    parser.add_argument(
+        "--hash-cache-file",
+        help="Override HASH_CACHE_FILE from INI file (path to SQLite hash cache)",
+    )
     return parser.parse_args()
 
 
@@ -113,6 +117,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         result = replace(result, ftp_directory=args.ftp_dir)
     if args.delete_source_after_days is not None:
         result = replace(result, delete_source_after_days=args.delete_source_after_days)
+    if args.hash_cache_file:
+        result = replace(result, hash_cache_file=args.hash_cache_file)
     return result
 
 

@@ -106,7 +106,9 @@ def _run_php_config(args: object) -> None:
             root_ignore_patterns = strip_subfolder_prefix(root_patterns, entry.subfolder)
 
         extra_ignore = entry.ignore_patterns + tuple(root_ignore_patterns)
-        hash_cache_file = os.path.join(local_directories[0], ".ftp_sync_cache.db")
+        hash_cache_file = getattr(args, "hash_cache_file", None) or os.path.join(
+            local_directories[0], ".ftp_sync_cache.db"
+        )
 
         settings = settings_from_php_entry(
             ftp_host=entry.ftp_host,
