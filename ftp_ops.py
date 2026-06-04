@@ -1,10 +1,10 @@
 """FTP connection management and file operations."""
 
 import contextlib
-import datetime
 import ftplib
 import logging
 import os
+import sys
 import threading
 
 from config import Settings
@@ -13,21 +13,79 @@ logger = logging.getLogger(__name__)
 
 _thread_local = threading.local()
 
+_PROGRESS_STEP_PCT = 10
+
+
+def _format_size(num_bytes: int) -> str:
+    """Format a byte count as a human-readable string."""
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
+class _UploadProgress:
+    """storbinary callback that reports upload progress.
+
+    When ``single_line`` is set (interactive terminal, one upload at a time) it rewrites a single
+    line with a carriage return. Otherwise it falls back to a throttled log line every 10%, which
+    stays readable when several files upload concurrently or output is redirected to a file.
+    """
+
+    def __init__(self, name: str, total_size: int, *, single_line: bool) -> None:
+        self._name = name
+        self._total = total_size
+        self._sent = 0
+        self._last_pct = -_PROGRESS_STEP_PCT
+        self._single_line = single_line
+
+    def __call__(self, block: bytes) -> None:
+        self._sent += len(block)
+        if self._total <= 0:
+            return
+        pct = min(self._sent * 100 // self._total, 100)
+
+        if self._single_line:
+            line = f"  {self._name}: {pct}% ({_format_size(self._sent)} / {_format_size(self._total)})"
+            sys.stderr.write("\r" + line.ljust(70))
+            sys.stderr.flush()
+            if pct >= 100:
+                sys.stderr.write("\n")
+                sys.stderr.flush()
+            return
+
+        if pct >= self._last_pct + _PROGRESS_STEP_PCT or pct >= 100:
+            self._last_pct = pct
+            logger.info("  %s: %d%% (%s / %s)", self._name, pct, _format_size(self._sent), _format_size(self._total))
+
+
+def _progress_single_line(settings: Settings) -> bool:
+    """Single-line progress is safe only on an interactive terminal with one concurrent upload."""
+    return settings.concurrent_operations == 1 and sys.stderr.isatty()
+
+
+def connect_ftp(settings: Settings) -> ftplib.FTP:
+    """Open and authenticate an FTP/FTPS connection (no directory change)."""
+    port = settings.ftp_port or 21
+    if settings.transfer_type == "FTPS":
+        ftp_tls = ftplib.FTP_TLS()
+        ftp_tls.connect(settings.ftp_host, port)
+        ftp_tls.login(settings.ftp_user, settings.ftp_pass)
+        ftp_tls.prot_p()
+        return ftp_tls
+    ftp = ftplib.FTP()
+    ftp.connect(settings.ftp_host, port)
+    ftp.login(settings.ftp_user, settings.ftp_pass)
+    return ftp
+
 
 def get_ftp_connection(settings: Settings) -> ftplib.FTP:
     """Create or get a thread-local FTP connection."""
     ftp_conn: ftplib.FTP | None = getattr(_thread_local, "ftp", None)
     if ftp_conn is None:
-        port = settings.ftp_port or 21
-        if settings.transfer_type == "FTPS":
-            ftp_conn = ftplib.FTP_TLS()
-            ftp_conn.connect(settings.ftp_host, port)
-            ftp_conn.login(settings.ftp_user, settings.ftp_pass)
-            ftp_conn.prot_p()
-        else:
-            ftp_conn = ftplib.FTP()
-            ftp_conn.connect(settings.ftp_host, port)
-            ftp_conn.login(settings.ftp_user, settings.ftp_pass)
+        ftp_conn = connect_ftp(settings)
         if settings.ftp_directory:
             ftp_conn.cwd(settings.ftp_directory)
         _thread_local.ftp = ftp_conn
@@ -131,9 +189,10 @@ def upload_file(args: tuple[str, str, Settings, list[str] | None]) -> str | None
             except (ftplib.error_perm, ftplib.error_temp):
                 pass
 
-        logger.info("Uploading %s", local_file)
+        logger.info("Uploading %s (%s)", local_file, _format_size(total_size))
         with open(local_file_path, "rb") as file:
-            ftp.storbinary(f"STOR {ftp_absolute_path}", file, 1024)
+            progress = _UploadProgress(local_file, total_size, single_line=_progress_single_line(settings))
+            ftp.storbinary(f"STOR {ftp_absolute_path}", file, 8192, callback=progress)
 
         logger.info("Completed upload of %s", local_file)
         return local_file
@@ -228,83 +287,3 @@ def delete_ftp_files(settings: Settings, ftp_files: list[str], local_files: set[
 
     logger.info("Deleted %d files from FTP.", deleted_count)
     return deleted_count
-
-
-def _parse_mdtm_response(response: str) -> datetime.datetime | None:
-    """Parse an MDTM response '213 YYYYMMDDHHmmss[.sss]' into a UTC datetime."""
-    parts = response.split(None, 1)
-    if len(parts) != 2 or parts[0] != "213":
-        return None
-    timestamp_str = parts[1].split(".")[0]
-    try:
-        return datetime.datetime.strptime(timestamp_str, "%Y%m%d%H%M%S").replace(
-            tzinfo=datetime.UTC
-        )
-    except ValueError:
-        return None
-
-
-def get_ftp_file_mtimes(
-    ftp: ftplib.FTP,
-    settings: Settings,
-    file_paths: list[str],
-) -> dict[str, datetime.datetime]:
-    """Get modification times for FTP files using the MDTM command.
-
-    Returns a dict mapping relative paths to UTC datetimes.
-    Files whose mtime cannot be determined are omitted.
-    """
-    mtimes: dict[str, datetime.datetime] = {}
-    for path in file_paths:
-        ftp_absolute_path = build_ftp_path(settings, path)
-        try:
-            response = ftp.sendcmd(f"MDTM {ftp_absolute_path}")
-            mtime = _parse_mdtm_response(response)
-            if mtime:
-                mtimes[path] = mtime
-            else:
-                logger.warning("Unexpected MDTM response for %s: %s", path, response)
-        except ftplib.error_perm:
-            logger.warning("MDTM not supported or failed for %s", path)
-        except ftplib.error_temp as exc:
-            logger.warning("Temporary FTP error getting mtime for %s: %s", path, exc)
-    if not mtimes and file_paths:
-        logger.warning(
-            "Could not retrieve modification times for any files. "
-            "The FTP server may not support the MDTM command. "
-            "Source cleanup will be skipped."
-        )
-    return mtimes
-
-
-def delete_old_ftp_files(
-    ftp: ftplib.FTP,
-    settings: Settings,
-    ftp_files: list[str],
-    max_age_days: int,
-) -> int:
-    """Delete FTP files older than max_age_days.
-
-    Returns the number of files successfully deleted.
-    """
-    mtimes = get_ftp_file_mtimes(ftp, settings, ftp_files)
-    if not mtimes:
-        return 0
-
-    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=max_age_days)
-    old_files = [path for path, mtime in mtimes.items() if mtime < cutoff]
-
-    if not old_files:
-        logger.debug("No FTP files older than %d days.", max_age_days)
-        return 0
-
-    logger.info("Deleting %d FTP files older than %d days...", len(old_files), max_age_days)
-    deleted: list[str] = []
-    for rel_path in old_files:
-        if delete_ftp_file(ftp, settings, rel_path):
-            deleted.append(rel_path)
-
-    if deleted:
-        remove_empty_ftp_dirs(ftp, settings, deleted)
-
-    return len(deleted)

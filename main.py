@@ -12,10 +12,11 @@ from deployignore import (
     load_deployignore_patterns,
     strip_subfolder_prefix,
 )
+from ftp_mtime import delete_old_ftp_files
 from ftp_ops import (
+    connect_ftp,
     delete_ftp_file,
     delete_ftp_files,
-    delete_old_ftp_files,
     download_file,
     ensure_ftp_dir,
     get_ftp_files_recursive,
@@ -39,25 +40,6 @@ def setup_logging() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-
-
-def _connect_ftp(settings: Settings) -> ftplib.FTP:
-    """Create an FTP connection based on transfer type."""
-    port = settings.ftp_port or 21
-    ftp: ftplib.FTP
-
-    if settings.transfer_type == "FTPS":
-        ftp_tls = ftplib.FTP_TLS()
-        ftp_tls.connect(settings.ftp_host, port)
-        ftp_tls.login(settings.ftp_user, settings.ftp_pass)
-        ftp_tls.prot_p()
-        ftp = ftp_tls
-    else:
-        ftp = ftplib.FTP()
-        ftp.connect(settings.ftp_host, port)
-        ftp.login(settings.ftp_user, settings.ftp_pass)
-
-    return ftp
 
 
 def main() -> None:
@@ -110,21 +92,13 @@ def _run_php_config(args: object) -> None:
             local_directories[0], ".ftp_sync_cache.db"
         )
 
-        settings = settings_from_php_entry(
-            ftp_host=entry.ftp_host,
-            ftp_user=entry.ftp_user,
-            ftp_pass=entry.ftp_pass,
-            ftp_directory=entry.ftp_directory,
-            local_directories=entry_local_dirs,
-            transfer_type=entry.transfer_type,
-            ftp_port=entry.ftp_port,
-            hash_cache_file=hash_cache_file,
-        )
+        settings = settings_from_php_entry(entry, entry_local_dirs, hash_cache_file)
 
         _run_sync(settings, extra_ignore, resync=getattr(args, "resync", False))
         sync_configs.append((settings, extra_ignore))
 
     if watcher_mode and sync_configs:
+
         def sync_all() -> None:
             for s, e in sync_configs:
                 _run_sync(s, e, resync=False)
@@ -166,7 +140,7 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
     for local_dir in settings.local_directories:
         os.makedirs(local_dir, exist_ok=True)
 
-    ftp = _connect_ftp(settings)
+    ftp = connect_ftp(settings)
     ensure_ftp_dir(ftp, settings.ftp_directory)
     ftp.cwd(settings.ftp_directory)
 
@@ -208,18 +182,14 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
                     "Checking for FTP source files older than %d days...",
                     settings.delete_source_after_days,
                 )
-                deleted_count = delete_old_ftp_files(
-                    ftp, settings, ftp_files, settings.delete_source_after_days
-                )
+                deleted_count = delete_old_ftp_files(ftp, settings, ftp_files, settings.delete_source_after_days)
                 if deleted_count:
                     logger.info("Source cleanup: deleted %d old files from FTP", deleted_count)
     finally:
         ftp.quit()
 
 
-def _upload_with_hash_cache(
-    settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP
-) -> None:
+def _upload_with_hash_cache(settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP) -> None:
     """Upload using local hash database for change detection (no FTP scan)."""
     session = open_hash_db(settings.hash_cache_file)
 
@@ -250,9 +220,7 @@ def _upload_with_hash_cache(
     session.close()
 
 
-def _upload_with_ftp_scan(
-    settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP
-) -> None:
+def _upload_with_ftp_scan(settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP) -> None:
     """Upload using FTP scan and size-based skip (legacy mode)."""
     logger.info("Getting file lists...")
     ftp_files = get_ftp_files_recursive(ftp, ignore_dirs=settings.ignore_dirs)

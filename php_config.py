@@ -63,9 +63,7 @@ def _tokenize(content: str) -> list[tuple[str, str]]:
     return tokens
 
 
-def _parse_value(
-    tokens: list[tuple[str, str]], pos: int, variables: dict[str, str]
-) -> tuple[Any, int]:
+def _parse_value(tokens: list[tuple[str, str]], pos: int, variables: dict[str, str]) -> tuple[Any, int]:
     """Parse a PHP value at the given token position."""
     kind, val = tokens[pos]
 

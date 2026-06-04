@@ -73,9 +73,7 @@ class TestGetLocalFilesRecursive:
         (tmp_path / "Unsortiert").mkdir()
         (tmp_path / "Unsortiert" / "file.txt").write_text("unsorted")
         (tmp_path / "keep.txt").write_text("keep")
-        result = get_local_files_recursive(
-            str(tmp_path), ignore_dirs=("_alt", "Unsortiert")
-        )
+        result = get_local_files_recursive(str(tmp_path), ignore_dirs=("_alt", "Unsortiert"))
         assert "keep.txt" in result
         assert "_alt/file.txt" not in result
         assert "Unsortiert/file.txt" not in result

@@ -104,10 +104,7 @@ class TestLoadSettings:
 
     def test_no_delete_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n"
-            "NO_DELETE = true\n"
-        )
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nNO_DELETE = true\n")
         settings = load_settings(str(ini_file))
         assert settings.no_delete is True
 
@@ -120,11 +117,7 @@ class TestLoadSettings:
     def test_hash_cache_file_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text(
-            "[FTP]\n"
-            "FTP_HOST = host\n"
-            "FTP_USER = user\n"
-            "FTP_PASS = pass\n"
-            "HASH_CACHE_FILE = C:\\cache\\sync.db\n"
+            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nHASH_CACHE_FILE = C:\\cache\\sync.db\n"
         )
         settings = load_settings(str(ini_file))
         assert settings.hash_cache_file == "C:\\cache\\sync.db"
@@ -152,11 +145,7 @@ class TestLoadSettings:
     def test_ignore_dirs_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text(
-            "[FTP]\n"
-            "FTP_HOST = host\n"
-            "FTP_USER = user\n"
-            "FTP_PASS = pass\n"
-            "IGNORE_DIRS = _old, _alt, Unsortiert\n"
+            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nIGNORE_DIRS = _old, _alt, Unsortiert\n"
         )
         settings = load_settings(str(ini_file))
         assert settings.ignore_dirs == ("_old", "_alt", "Unsortiert")
@@ -169,19 +158,13 @@ class TestLoadSettings:
 
     def test_delete_source_after_days_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n"
-            "DELETE_SOURCE_AFTER_DAYS = 30\n"
-        )
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DAYS = 30\n")
         settings = load_settings(str(ini_file))
         assert settings.delete_source_after_days == 30
 
     def test_delete_source_after_days_negative_raises_error(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n"
-            "DELETE_SOURCE_AFTER_DAYS = -1\n"
-        )
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DAYS = -1\n")
         with pytest.raises(ValueError, match="DELETE_SOURCE_AFTER_DAYS must be >= 0"):
             load_settings(str(ini_file))
 
@@ -241,8 +224,11 @@ class TestApplyOverrides:
     def test_both_overrides(self) -> None:
         settings = self._base_settings()
         args = argparse.Namespace(
-            local_dir="new_local", ftp_dir="/new_remote", delete_source_after_days=None,
-            hash_cache_file=None, no_delete=False,
+            local_dir="new_local",
+            ftp_dir="/new_remote",
+            delete_source_after_days=None,
+            hash_cache_file=None,
+            no_delete=False,
         )
         result = apply_overrides(settings, args)
         assert result.local_directories == ("new_local",)
@@ -259,7 +245,10 @@ class TestApplyOverrides:
     def test_delete_source_after_days_override(self) -> None:
         settings = self._base_settings()
         args = argparse.Namespace(
-            local_dir=None, ftp_dir=None, delete_source_after_days=45, hash_cache_file=None,
+            local_dir=None,
+            ftp_dir=None,
+            delete_source_after_days=45,
+            hash_cache_file=None,
             no_delete=False,
         )
         result = apply_overrides(settings, args)
@@ -280,7 +269,10 @@ class TestApplyOverrides:
     def test_no_delete_override(self) -> None:
         settings = self._base_settings()
         args = argparse.Namespace(
-            local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None,
+            local_dir=None,
+            ftp_dir=None,
+            delete_source_after_days=None,
+            hash_cache_file=None,
             no_delete=True,
         )
         result = apply_overrides(settings, args)
@@ -288,8 +280,6 @@ class TestApplyOverrides:
 
     def test_no_delete_override_absent_defaults_false(self) -> None:
         settings = self._base_settings()
-        args = argparse.Namespace(
-            local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None
-        )
+        args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None)
         result = apply_overrides(settings, args)
         assert result.no_delete is False

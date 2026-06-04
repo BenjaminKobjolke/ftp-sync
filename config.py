@@ -5,6 +5,8 @@ import configparser
 import logging
 from dataclasses import dataclass, replace
 
+from php_config import PhpDeployEntry
+
 logger = logging.getLogger(__name__)
 
 REQUIRED_SETTINGS = ["FTP_HOST", "FTP_USER", "FTP_PASS"]
@@ -100,7 +102,9 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--resync", action="store_true", help="Clear hash cache and re-upload all files")
     parser.add_argument("--watcher", "-w", action="store_true", help="Watch for file changes and sync automatically")
     parser.add_argument(
-        "--delete-source-after-days", type=int, default=None,
+        "--delete-source-after-days",
+        type=int,
+        default=None,
         help="Delete source files older than N days after sync (0=disabled)",
     )
     parser.add_argument(
@@ -132,24 +136,19 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
 
 
 def settings_from_php_entry(
-    ftp_host: str,
-    ftp_user: str,
-    ftp_pass: str,
-    ftp_directory: str,
+    entry: PhpDeployEntry,
     local_directories: tuple[str, ...],
-    transfer_type: str = "FTP",
-    ftp_port: int = 0,
     hash_cache_file: str = "",
 ) -> Settings:
-    """Create Settings from PHP deploy config entry values."""
+    """Create Settings from a PHP deploy config entry."""
     return Settings(
         local_directories=local_directories,
-        ftp_directory=ftp_directory,
-        ftp_host=ftp_host,
-        ftp_user=ftp_user,
-        ftp_pass=ftp_pass,
+        ftp_directory=entry.ftp_directory,
+        ftp_host=entry.ftp_host,
+        ftp_user=entry.ftp_user,
+        ftp_pass=entry.ftp_pass,
         direction="up",
-        transfer_type=transfer_type,
-        ftp_port=ftp_port,
+        transfer_type=entry.transfer_type,
+        ftp_port=entry.ftp_port,
         hash_cache_file=hash_cache_file,
     )

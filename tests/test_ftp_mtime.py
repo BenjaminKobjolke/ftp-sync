@@ -5,7 +5,7 @@ import ftplib
 from unittest.mock import MagicMock, patch
 
 from config import Settings
-from ftp_ops import _parse_mdtm_response, delete_old_ftp_files, get_ftp_file_mtimes
+from ftp_mtime import _parse_mdtm_response, delete_old_ftp_files, get_ftp_file_mtimes
 
 
 def _make_settings() -> Settings:
@@ -53,9 +53,7 @@ class TestGetFtpFileMtimes:
         result = get_ftp_file_mtimes(ftp, settings, ["file1.txt", "file2.txt"])
 
         assert len(result) == 2
-        assert result["file1.txt"] == datetime.datetime(
-            2024, 1, 15, 14, 30, 22, tzinfo=datetime.UTC
-        )
+        assert result["file1.txt"] == datetime.datetime(2024, 1, 15, 14, 30, 22, tzinfo=datetime.UTC)
 
     def test_skips_files_with_perm_error(self) -> None:
         ftp = MagicMock(spec=ftplib.FTP)
@@ -83,9 +81,9 @@ class TestGetFtpFileMtimes:
 class TestDeleteOldFtpFiles:
     """Tests for delete_old_ftp_files."""
 
-    @patch("ftp_ops.remove_empty_ftp_dirs")
-    @patch("ftp_ops.delete_ftp_file")
-    @patch("ftp_ops.get_ftp_file_mtimes")
+    @patch("ftp_mtime.remove_empty_ftp_dirs")
+    @patch("ftp_mtime.delete_ftp_file")
+    @patch("ftp_mtime.get_ftp_file_mtimes")
     def test_deletes_only_old_files(
         self,
         mock_mtimes: MagicMock,
@@ -107,7 +105,7 @@ class TestDeleteOldFtpFiles:
         mock_delete.assert_called_once_with(ftp, settings, "old.txt")
         mock_remove_dirs.assert_called_once()
 
-    @patch("ftp_ops.get_ftp_file_mtimes")
+    @patch("ftp_mtime.get_ftp_file_mtimes")
     def test_no_files_deleted_when_all_recent(
         self,
         mock_mtimes: MagicMock,
@@ -124,7 +122,7 @@ class TestDeleteOldFtpFiles:
 
         assert result == 0
 
-    @patch("ftp_ops.get_ftp_file_mtimes")
+    @patch("ftp_mtime.get_ftp_file_mtimes")
     def test_returns_zero_when_no_mtimes(
         self,
         mock_mtimes: MagicMock,

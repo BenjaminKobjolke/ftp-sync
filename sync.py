@@ -44,9 +44,7 @@ def get_local_files_recursive(
             if deploy_spec and deploy_spec.match_file(dir_rel_path + "/"):
                 logger.debug("Skipping ignored directory: %s", dir_rel_path)
                 continue
-            files.extend(
-                get_local_files_recursive(full_path, base_dir, ignore_dirs, deploy_spec)
-            )
+            files.extend(get_local_files_recursive(full_path, base_dir, ignore_dirs, deploy_spec))
     return files
 
 
@@ -65,9 +63,7 @@ def build_merged_file_map(
 
     for local_dir in local_directories:
         deploy_spec = load_deployignore(local_dir, extra_ignore_patterns)
-        for rel_path in get_local_files_recursive(
-            local_dir, ignore_dirs=ignore_dirs, deploy_spec=deploy_spec
-        ):
+        for rel_path in get_local_files_recursive(local_dir, ignore_dirs=ignore_dirs, deploy_spec=deploy_spec):
             abs_path = os.path.join(local_dir, rel_path)
             mtime = os.path.getmtime(abs_path)
 

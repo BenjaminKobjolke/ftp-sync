@@ -10,9 +10,7 @@ logger = logging.getLogger(__name__)
 DEPLOYIGNORE_FILENAME = ".deployignore"
 
 
-def load_deployignore(
-    directory: str, extra_patterns: tuple[str, ...] = ()
-) -> pathspec.PathSpec:
+def load_deployignore(directory: str, extra_patterns: tuple[str, ...] = ()) -> pathspec.PathSpec:
     """Load .deployignore patterns from a directory root.
 
     Returns a PathSpec matcher using gitignore syntax.
@@ -67,7 +65,7 @@ def strip_subfolder_prefix(patterns: list[str], subfolder: str) -> list[str]:
     result: list[str] = []
     for p in patterns:
         if p.startswith(prefix):
-            result.append(p[len(prefix):])
+            result.append(p[len(prefix) :])
         elif p.rstrip("/") == subfolder.rstrip("/"):
             result.append("/")
         else:
