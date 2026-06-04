@@ -236,13 +236,16 @@ def _upload_with_hash_cache(
         completed = sync_files(settings, upload_file, upload_args)
         upsert_hashes(session, {rel: current_hashes[rel] for rel in completed})
 
-    deleted = find_deleted_paths(session, set(merged_files.keys()))
-    if deleted:
-        logger.info("Deleting %d files from FTP that were removed locally...", len(deleted))
-        for rel in deleted:
-            delete_ftp_file(ftp, settings, rel)
-        delete_paths(session, deleted)
-        remove_empty_ftp_dirs(ftp, settings, deleted)
+    if settings.no_delete:
+        logger.info("no-delete mode: skipping remote deletions")
+    else:
+        deleted = find_deleted_paths(session, set(merged_files.keys()))
+        if deleted:
+            logger.info("Deleting %d files from FTP that were removed locally...", len(deleted))
+            for rel in deleted:
+                delete_ftp_file(ftp, settings, rel)
+            delete_paths(session, deleted)
+            remove_empty_ftp_dirs(ftp, settings, deleted)
 
     session.close()
 
@@ -258,7 +261,10 @@ def _upload_with_ftp_scan(
     upload_args = [(rel, abs_path, settings, ftp_files) for rel, abs_path in merged_files.items()]
     sync_files(settings, upload_file, upload_args)
 
-    delete_ftp_files(settings, ftp_files, set(merged_files.keys()))
+    if settings.no_delete:
+        logger.info("no-delete mode: skipping remote deletions")
+    else:
+        delete_ftp_files(settings, ftp_files, set(merged_files.keys()))
 
 
 if __name__ == "__main__":

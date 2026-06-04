@@ -27,6 +27,7 @@ class Settings:
     transfer_type: str = "FTP"
     ftp_port: int = 0
     delete_source_after_days: int = 0
+    no_delete: bool = False
 
 
 def _parse_comma_list(raw: str) -> tuple[str, ...]:
@@ -84,6 +85,7 @@ def load_settings(ini_file: str) -> Settings:
         ignore_dirs=ignore_dirs,
         hash_cache_file=ftp_section.get("HASH_CACHE_FILE", ""),
         delete_source_after_days=_parse_delete_source_after_days(ftp_section),
+        no_delete=ftp_section.getboolean("NO_DELETE", False),
     )
 
 
@@ -105,6 +107,11 @@ def parse_arguments() -> argparse.Namespace:
         "--hash-cache-file",
         help="Override HASH_CACHE_FILE from INI file (path to SQLite hash cache)",
     )
+    parser.add_argument(
+        "--no-delete",
+        action="store_true",
+        help="Upload mode: never delete remote files absent locally (keeps existing remote files)",
+    )
     return parser.parse_args()
 
 
@@ -119,6 +126,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         result = replace(result, delete_source_after_days=args.delete_source_after_days)
     if args.hash_cache_file:
         result = replace(result, hash_cache_file=args.hash_cache_file)
+    if getattr(args, "no_delete", False):
+        result = replace(result, no_delete=True)
     return result
 
 

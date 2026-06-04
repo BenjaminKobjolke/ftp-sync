@@ -12,6 +12,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Old file handling** — when downloading, local files no longer on the server are moved to an `old` subfolder
 - **Multi-directory upload** — sync multiple local folders into one FTP directory (newer file wins on conflicts)
 - **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode)
+- **No-delete upload** — `--no-delete` / `NO_DELETE` uploads and updates files but never deletes remote files absent locally (keeps existing remote files)
 - **Ignore directories** — configurable list of directory names to skip during sync (both directions)
 - **`.deployignore`** — gitignore-style file placed in synced directories to exclude files/folders from sync
 - **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
@@ -32,7 +33,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--resync] [--watcher] [--delete-source-after-days N]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--resync] [--watcher] [--delete-source-after-days N] [--no-delete]
 ```
 
 ### Examples
@@ -61,6 +62,11 @@ uv run python main.py settings.ini --delete-source-after-days 30
 Force full re-upload by clearing the hash cache:
 ```
 uv run python main.py settings.ini --resync
+```
+
+Upload without deleting remote files that are absent locally (additive upload):
+```
+uv run python main.py settings.ini --no-delete
 ```
 
 Use a custom hash cache file location (overrides `HASH_CACHE_FILE` from INI):
@@ -95,6 +101,9 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 # Delete source files older than N days after sync (default: 0 = disabled)
 # When DIRECTION = down, deletes files from FTP older than this many days
 # DELETE_SOURCE_AFTER_DAYS = 30
+
+# Upload only: never delete remote files that are absent locally (default: false)
+# NO_DELETE = false
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.
