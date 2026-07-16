@@ -138,6 +138,8 @@ tests/
 
 The `.deployignore` file itself is always excluded from sync. Patterns from `.deployignore` are combined with ignore patterns from PHP config files when both are present.
 
+If a synced directory has no `.deployignore`, a default one (excluding `.git/`, `node_modules/`, `__pycache__/`, `.env`, OS junk files, etc.) is created automatically at sync startup. See [docs/DEPLOYIGNORE.md](docs/DEPLOYIGNORE.md) for full documentation.
+
 ## Development
 
 ```bash

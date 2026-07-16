@@ -2,7 +2,12 @@
 
 from pathlib import Path
 
-from deployignore import DEPLOYIGNORE_FILENAME, filter_ignored_paths, load_deployignore
+from deployignore import (
+    DEPLOYIGNORE_FILENAME,
+    ensure_deployignore,
+    filter_ignored_paths,
+    load_deployignore,
+)
 
 
 class TestLoadDeployignore:
@@ -38,6 +43,53 @@ class TestLoadDeployignore:
         spec = load_deployignore(str(tmp_path))
         assert spec.match_file(DEPLOYIGNORE_FILENAME)
         assert not spec.match_file("src/main.py")
+
+
+class TestEnsureDeployignore:
+    """Tests for ensure_deployignore."""
+
+    def test_creates_default_file_when_missing(self, tmp_path: Path) -> None:
+        created = ensure_deployignore(str(tmp_path))
+        assert created is True
+        content = (tmp_path / DEPLOYIGNORE_FILENAME).read_text(encoding="utf-8")
+        assert ".git/" in content
+
+    def test_does_not_overwrite_existing_file(self, tmp_path: Path) -> None:
+        ignore_file = tmp_path / DEPLOYIGNORE_FILENAME
+        ignore_file.write_text("custom\n")
+        created = ensure_deployignore(str(tmp_path))
+        assert created is False
+        assert ignore_file.read_text() == "custom\n"
+
+    def test_default_patterns_match_expected_paths(self, tmp_path: Path) -> None:
+        ensure_deployignore(str(tmp_path))
+        spec = load_deployignore(str(tmp_path))
+        assert spec.match_file(".git/config")
+        assert spec.match_file("node_modules/pkg/index.js")
+        assert spec.match_file("sub/__pycache__/mod.pyc")
+        assert spec.match_file(".env")
+        assert spec.match_file(".DS_Store")
+        assert spec.match_file("claude-plans/plan.md")
+        assert spec.match_file("tests/test_foo.php")
+        assert spec.match_file("CLAUDE.md")
+        assert spec.match_file("config.php")
+        assert spec.match_file(".gitignore")
+        assert not spec.match_file("src/main.py")
+        assert not spec.match_file("index.php")
+
+    def test_root_only_vs_any_depth_folders(self, tmp_path: Path) -> None:
+        ensure_deployignore(str(tmp_path))
+        spec = load_deployignore(str(tmp_path))
+        assert spec.match_file("tools/build.bat")
+        assert not spec.match_file("src/tools/helper.py")
+        assert not spec.match_file("module/tests/test_x.php")
+        assert spec.match_file("sub/__pycache__/mod.pyc")
+        assert spec.match_file("vendor/pkg/.git/config")
+        assert spec.match_file("sub/tmp/cache.txt")
+        assert spec.match_file("sub/graphify-out/graph.json")
+        assert spec.match_file("sub/claude-plans/plan.md")
+        assert spec.match_file("sub/code_analysis_results/report.md")
+        assert spec.match_file("sub/.claude/settings.json")
 
 
 class TestFilterIgnoredPaths:

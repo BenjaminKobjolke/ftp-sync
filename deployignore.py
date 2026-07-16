@@ -9,6 +9,52 @@ logger = logging.getLogger(__name__)
 
 DEPLOYIGNORE_FILENAME = ".deployignore"
 
+DEFAULT_DEPLOYIGNORE_CONTENT = """\
+# Default .deployignore created by ftp-sync
+# Uses .gitignore syntax. Edit as needed.
+# Folders excluded at any depth
+.git/
+.svn/
+.hg/
+.claude/
+node_modules/
+__pycache__/
+claude-plans/
+code_analysis_results/
+graphify-out/
+tmp/
+# Folders excluded at root only
+/tests/
+/tools/
+*.pyc
+.DS_Store
+Thumbs.db
+.env
+.deployignore
+.gitignore
+.gitattributes
+.phpunit.result.cache
+CLAUDE.md
+config.php
+config_example.php
+code_analysis_rules.json
+"""
+
+
+def ensure_deployignore(directory: str) -> bool:
+    """Create a default .deployignore in directory if missing.
+
+    Returns True if the file was created, False if it already existed.
+    """
+    ignore_path = os.path.join(directory, DEPLOYIGNORE_FILENAME)
+    if os.path.isfile(ignore_path):
+        logger.debug("%s already exists in %s", DEPLOYIGNORE_FILENAME, directory)
+        return False
+    with open(ignore_path, "w", encoding="utf-8") as f:
+        f.write(DEFAULT_DEPLOYIGNORE_CONTENT)
+    logger.info("Created default %s in %s", DEPLOYIGNORE_FILENAME, directory)
+    return True
+
 
 def load_deployignore(directory: str, extra_patterns: tuple[str, ...] = ()) -> pathspec.PathSpec:
     """Load .deployignore patterns from a directory root.

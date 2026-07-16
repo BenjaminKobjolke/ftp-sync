@@ -7,6 +7,7 @@ import sys
 
 from config import Settings, apply_overrides, load_settings, parse_arguments, settings_from_php_entry
 from deployignore import (
+    ensure_deployignore,
     filter_ignored_paths,
     load_deployignore,
     load_deployignore_patterns,
@@ -139,6 +140,7 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
 
     for local_dir in settings.local_directories:
         os.makedirs(local_dir, exist_ok=True)
+        ensure_deployignore(local_dir)
 
     ftp = connect_ftp(settings)
     ensure_ftp_dir(ftp, settings.ftp_directory)
