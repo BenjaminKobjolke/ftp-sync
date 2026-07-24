@@ -1,5 +1,6 @@
 """FTP Sync Tool - entry point."""
 
+import contextlib
 import ftplib
 import logging
 import os
@@ -48,10 +49,15 @@ def main() -> None:
     setup_logging()
     args = parse_arguments()
 
-    if args.settings_file.endswith(".php"):
-        _run_php_config(args)
-    else:
-        _run_ini_config(args)
+    try:
+        if args.settings_file.endswith(".php"):
+            _run_php_config(args)
+        else:
+            _run_ini_config(args)
+    except ftplib.all_errors as e:
+        logger.error("FTP connection error: %s", e)
+        logger.error("Check FTP_HOST / FTP_PORT, credentials, and TRANSFER_TYPE (FTP vs FTPS) in your INI file.")
+        sys.exit(1)
 
 
 def _run_php_config(args: object) -> None:
@@ -188,7 +194,10 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
                 if deleted_count:
                     logger.info("Source cleanup: deleted %d old files from FTP", deleted_count)
     finally:
-        ftp.quit()
+        # A broken control/data connection can make quit() itself raise, which would
+        # mask whatever error caused the sync to fail in the first place.
+        with contextlib.suppress(Exception):
+            ftp.quit()
 
 
 def _upload_with_hash_cache(settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP) -> None:

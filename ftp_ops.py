@@ -4,6 +4,8 @@ import contextlib
 import ftplib
 import logging
 import os
+import socket
+import ssl
 import sys
 import threading
 
@@ -66,16 +68,64 @@ def _progress_single_line(settings: Settings) -> bool:
     return settings.concurrent_operations == 1 and sys.stderr.isatty()
 
 
+def _make_ftps_context() -> ssl.SSLContext:
+    """Build the SSL context used for FTPS connections.
+
+    Unverified, matching ftplib.FTP_TLS's own default context: most FTPS servers
+    use self-signed certificates.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+class _ReusedTLSSession(ftplib.FTP_TLS):
+    """FTP_TLS that resumes the control channel's TLS session on data connections.
+
+    Servers hardened with require_ssl_reuse (common on vsftpd) reject data connections
+    whose TLS session was not resumed from the control connection, failing with
+    "425 ... TLS session of data connection not resumed". ftplib does not do this
+    resumption by default. Tracks protection state ourselves (rather than reading
+    ftplib's private `_prot_p`) so this stays valid under strict typing.
+    """
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs.setdefault("context", _make_ftps_context())
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self._data_protected = False
+
+    def prot_p(self) -> str:
+        result = super().prot_p()
+        self._data_protected = True
+        return result
+
+    def ntransfercmd(self, cmd: str, rest: int | str | None = None) -> tuple[socket.socket, int | None]:
+        # Deliberately skip FTP_TLS.ntransfercmd (the direct parent) here: it wraps the raw
+        # socket in a fresh, non-resumed TLS session, which is exactly what
+        # require-ssl-reuse servers reject. Go to ftplib.FTP.ntransfercmd for the raw
+        # socket instead, so we're the only ones wrapping it, with the resumed session.
+        conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
+        if self._data_protected and isinstance(self.sock, ssl.SSLSocket):
+            conn = self.context.wrap_socket(conn, server_hostname=self.host, session=self.sock.session)
+        return conn, size
+
+
 def connect_ftp(settings: Settings) -> ftplib.FTP:
     """Open and authenticate an FTP/FTPS connection (no directory change)."""
     port = settings.ftp_port or 21
+    # ponytail: set FTP_SYNC_DEBUG=1 to dump the raw FTP control conversation
+    # (AUTH/PROT/PASV/response codes) when diagnosing connection failures.
+    debug_level = 2 if os.environ.get("FTP_SYNC_DEBUG") else 0
     if settings.transfer_type == "FTPS":
-        ftp_tls = ftplib.FTP_TLS()
+        ftp_tls = _ReusedTLSSession()
+        ftp_tls.set_debuglevel(debug_level)
         ftp_tls.connect(settings.ftp_host, port)
         ftp_tls.login(settings.ftp_user, settings.ftp_pass)
         ftp_tls.prot_p()
         return ftp_tls
     ftp = ftplib.FTP()
+    ftp.set_debuglevel(debug_level)
     ftp.connect(settings.ftp_host, port)
     ftp.login(settings.ftp_user, settings.ftp_pass)
     return ftp

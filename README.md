@@ -84,6 +84,9 @@ FTP_HOST = server.com
 FTP_USER = user
 FTP_PASS = password
 
+# Custom FTP port (default: 21)
+# FTP_PORT = 2121
+
 # Direction of sync: down = FTP to local, up = local to FTP
 DIRECTION = down
 
@@ -107,6 +110,8 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.
+
+See [docs/SETTINGS_INI.md](docs/SETTINGS_INI.md) for the full reference of every INI setting.
 
 ### PHP deploy config format
 

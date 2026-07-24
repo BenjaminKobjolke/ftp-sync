@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 REQUIRED_SETTINGS = ["FTP_HOST", "FTP_USER", "FTP_PASS"]
 VALID_DIRECTIONS = ("up", "down")
+VALID_TRANSFER_TYPES = ("FTP", "FTPS")
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,14 @@ def _parse_delete_source_after_days(ftp_section: configparser.SectionProxy) -> i
     return value
 
 
+def _parse_ftp_port(ftp_section: configparser.SectionProxy) -> int:
+    """Parse and validate FTP_PORT from INI section (0 = use protocol default)."""
+    value = int(ftp_section.get("FTP_PORT", "0"))
+    if value < 0:
+        raise ValueError(f"FTP_PORT must be >= 0, got {value}")
+    return value
+
+
 def load_settings(ini_file: str) -> Settings:
     """Load and validate settings from an INI file."""
     config = configparser.ConfigParser()
@@ -76,6 +85,10 @@ def load_settings(ini_file: str) -> Settings:
     if len(local_directories) > 1 and direction != "up":
         raise ValueError("Multiple LOCAL_DIRECTORY paths are only supported with DIRECTION = up")
 
+    transfer_type = ftp_section.get("TRANSFER_TYPE", "FTP").upper()
+    if transfer_type not in VALID_TRANSFER_TYPES:
+        raise ValueError(f"Invalid TRANSFER_TYPE '{transfer_type}', must be one of: {', '.join(VALID_TRANSFER_TYPES)}")
+
     return Settings(
         local_directories=local_directories,
         ftp_directory=ftp_section.get("FTP_DIRECTORY", ""),
@@ -86,6 +99,8 @@ def load_settings(ini_file: str) -> Settings:
         concurrent_operations=concurrent_ops,
         ignore_dirs=ignore_dirs,
         hash_cache_file=ftp_section.get("HASH_CACHE_FILE", ""),
+        transfer_type=transfer_type,
+        ftp_port=_parse_ftp_port(ftp_section),
         delete_source_after_days=_parse_delete_source_after_days(ftp_section),
         no_delete=ftp_section.getboolean("NO_DELETE", False),
     )

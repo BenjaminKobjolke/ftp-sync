@@ -168,6 +168,42 @@ class TestLoadSettings:
         with pytest.raises(ValueError, match="DELETE_SOURCE_AFTER_DAYS must be >= 0"):
             load_settings(str(ini_file))
 
+    def test_ftp_port_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nFTP_PORT = 2121\n")
+        settings = load_settings(str(ini_file))
+        assert settings.ftp_port == 2121
+
+    def test_ftp_port_defaults_to_zero(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        settings = load_settings(str(ini_file))
+        assert settings.ftp_port == 0
+
+    def test_ftp_port_negative_raises_error(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nFTP_PORT = -1\n")
+        with pytest.raises(ValueError, match="FTP_PORT must be >= 0"):
+            load_settings(str(ini_file))
+
+    def test_transfer_type_ftps_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nTRANSFER_TYPE = FTPS\n")
+        settings = load_settings(str(ini_file))
+        assert settings.transfer_type == "FTPS"
+
+    def test_transfer_type_defaults_to_ftp(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        settings = load_settings(str(ini_file))
+        assert settings.transfer_type == "FTP"
+
+    def test_invalid_transfer_type_raises_error(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nTRANSFER_TYPE = SFTP\n")
+        with pytest.raises(ValueError, match="Invalid TRANSFER_TYPE"):
+            load_settings(str(ini_file))
+
     def test_multi_directory_with_direction_down_raises_error(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text(
