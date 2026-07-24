@@ -10,7 +10,9 @@ from php_config import PhpDeployEntry
 logger = logging.getLogger(__name__)
 
 REQUIRED_SETTINGS = ["FTP_HOST", "FTP_USER", "FTP_PASS"]
-VALID_DIRECTIONS = ("up", "down")
+DIRECTION_UP = "up"
+DIRECTION_DOWN = "down"
+VALID_DIRECTIONS = (DIRECTION_UP, DIRECTION_DOWN)
 VALID_TRANSFER_TYPES = ("FTP", "FTPS")
 
 
@@ -23,7 +25,7 @@ class Settings:
     ftp_host: str
     ftp_user: str
     ftp_pass: str
-    direction: str = "down"
+    direction: str = DIRECTION_DOWN
     concurrent_operations: int = 1
     ignore_dirs: tuple[str, ...] = ()
     hash_cache_file: str = ""
@@ -71,7 +73,7 @@ def load_settings(ini_file: str) -> Settings:
         if setting not in ftp_section:
             raise ValueError(f"Missing required setting: {setting}")
 
-    direction = ftp_section.get("DIRECTION", "down").lower()
+    direction = ftp_section.get("DIRECTION", DIRECTION_DOWN).lower()
     if direction not in VALID_DIRECTIONS:
         raise ValueError(f"Invalid DIRECTION '{direction}', must be one of: {', '.join(VALID_DIRECTIONS)}")
 
@@ -82,7 +84,7 @@ def load_settings(ini_file: str) -> Settings:
     local_directories = _parse_comma_list(ftp_section.get("LOCAL_DIRECTORY", ""))
     ignore_dirs = _parse_comma_list(ftp_section.get("IGNORE_DIRS", ""))
 
-    if len(local_directories) > 1 and direction != "up":
+    if len(local_directories) > 1 and direction != DIRECTION_UP:
         raise ValueError("Multiple LOCAL_DIRECTORY paths are only supported with DIRECTION = up")
 
     transfer_type = ftp_section.get("TRANSFER_TYPE", "FTP").upper()
@@ -162,7 +164,7 @@ def settings_from_php_entry(
         ftp_host=entry.ftp_host,
         ftp_user=entry.ftp_user,
         ftp_pass=entry.ftp_pass,
-        direction="up",
+        direction=DIRECTION_UP,
         transfer_type=entry.transfer_type,
         ftp_port=entry.ftp_port,
         hash_cache_file=hash_cache_file,

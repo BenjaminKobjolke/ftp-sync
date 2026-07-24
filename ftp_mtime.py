@@ -5,7 +5,8 @@ import ftplib
 import logging
 
 from config import Settings
-from ftp_ops import build_ftp_path, delete_ftp_file, remove_empty_ftp_dirs
+from ftp_delete import delete_ftp_file, remove_empty_ftp_dirs
+from ftp_ops import build_ftp_path
 
 logger = logging.getLogger(__name__)
 

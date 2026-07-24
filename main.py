@@ -6,7 +6,7 @@ import logging
 import os
 import sys
 
-from config import Settings, apply_overrides, load_settings, parse_arguments, settings_from_php_entry
+from config import DIRECTION_UP, Settings, apply_overrides, load_settings, parse_arguments, settings_from_php_entry
 from deployignore import (
     ensure_deployignore,
     filter_ignored_paths,
@@ -14,15 +14,13 @@ from deployignore import (
     load_deployignore_patterns,
     strip_subfolder_prefix,
 )
+from ftp_delete import delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
 from ftp_mtime import delete_old_ftp_files
 from ftp_ops import (
     connect_ftp,
-    delete_ftp_file,
-    delete_ftp_files,
     download_file,
     ensure_ftp_dir,
     get_ftp_files_recursive,
-    remove_empty_ftp_dirs,
     upload_file,
 )
 from hash_db import delete_paths, filter_changed_files, find_deleted_paths, open_hash_db, upsert_hashes
@@ -153,7 +151,7 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
     ftp.cwd(settings.ftp_directory)
 
     try:
-        if settings.direction == "up":
+        if settings.direction == DIRECTION_UP:
             merged_files = build_merged_file_map(
                 settings.local_directories, settings.ignore_dirs, extra_ignore_patterns
             )
