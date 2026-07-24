@@ -11,6 +11,33 @@ Relevant files: `COMMON_RULES.md` (all languages) and `PYTHON_RULES.md` (this pr
 Web-only Python rules (Jinja2 templates, localization, async, Pydantic API validation) do not
 apply — this is a CLI tool. Keep the rules below in sync when the source files change.
 
+## AI Workflow Rules (always apply)
+
+Feature/change workflow after plan approval — DRY gate is precondition for implementing:
+
+```
+plan approved
+  → /plan:dry            check approved plan for DRY/consolidation BEFORE code
+  → /plan:dry-checked    reload + review the DRY-adjusted plan
+  → /convention:check    scan for existing patterns/components to reuse
+  ─────────────────────  DRY GATE — must be cleared to proceed
+  → restate Definition-of-Done aloud
+  → implement
+  → /dry:check           post-implementation DRY audit
+  → /verify:after-change run tests + code analysis
+```
+
+DRY gate (do not write a line until all true, restate aloud when starting): `/plan:dry` ran +
+plan adjusted; `/plan:dry-checked` reloaded/confirmed; `/convention:check` found reusable
+utilities/patterns. Gate survives implementation — adding a new helper mid-implementation
+re-triggers it.
+
+Definition of Done — state before first edit: scope (what changes/what doesn't), reuse
+(existing function/component + path), DRY gate cleared, `/dry:check` clean,
+`/verify:after-change` green.
+
+Bug-fix workflow (shorter, no plan-DRY phase): `bugs:fix` → `/verify:after-change`.
+
 ## Package Manager
 
 - Use **uv** for dependency management
@@ -63,6 +90,47 @@ ftp-sync/
 - Validate at boundaries (INI file loading, CLI arguments)
 - Prefer a centralized handling/logging strategy over ad-hoc try/catch scattered everywhere
 - Include context in log messages (module, operation, relevant IDs)
+
+### Centralized Logger — Single Off Switch (target pattern)
+- Route all logging through one `AppLogger` class (`app_logger.py`) wrapping the `logging` module
+- Feature code calls `AppLogger`, never `logging.getLogger(...)` directly — gives one
+  enable/level toggle without touching call sites
+- Callers pass a level (debug/info/warning/error); logger decides what's emitted from central config
+- Current modules use `logger = logging.getLogger(__name__)` per-file — migrate to `AppLogger`
+  incrementally, new modules should prefer `AppLogger` where practical
+
+### Keep It Simple (KISS)
+- YAGNI: no interface with one implementation, no factory for one product, no config for a
+  value that never changes
+- Boring over clever — the obvious solution wins
+- Deletion over addition — shortest working change is usually right
+
+### Derive, Don't Duplicate
+- When one value strictly determines another, pass only the determinant and derive the rest —
+  never thread both side-by-side through call sites/constructors
+- Example: don't pass both a category and a type when type always implies category; derive
+  category from type via one exhaustive match/property
+- Only applies to true functional dependencies, not independent/many-to-many values
+
+### No Hardcoded Environment Values
+- Never hardcode filesystem paths, hostnames, IPs, ports, base URLs in code
+- Read from `Settings` (INI-backed) with a committed `.example` template documenting every key
+- Distinct from secrets: this is about portability, not secrecy
+
+### Inject Collaborators, Don't Fold Dependencies In
+- Prefer constructor-injected collaborators over mixins/traits that fold in a helper's own
+  dependencies
+- Never instantiate a service with `new`/direct construction inside a method — inject it so
+  tests can substitute it
+- Bundle config-callback swarms (many one-line overridable getters) into a single value object
+  built once, instead of scattering wiring across dozens of methods
+
+### Comments Explain Why, Not What
+- Comment intent and non-obvious reasoning, not a restatement of the code
+- Anti-pattern: `i += 1  # increment i`
+- Document why a workaround exists, why a non-obvious approach was chosen, or a constraint not
+  visible locally
+- Keep comments in sync with code; delete stale ones rather than let them mislead
 
 ### File Length
 - Maximum 300 lines per file
