@@ -156,6 +156,20 @@ class TestLoadSettings:
         settings = load_settings(str(ini_file))
         assert settings.ignore_dirs == ()
 
+    def test_clear_remote_dirs_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nCLEAR_REMOTE_DIRS = cache/css, cache/images\n"
+        )
+        settings = load_settings(str(ini_file))
+        assert settings.clear_remote_dirs == ("cache/css", "cache/images")
+
+    def test_clear_remote_dirs_defaults_to_empty(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        settings = load_settings(str(ini_file))
+        assert settings.clear_remote_dirs == ()
+
     def test_delete_source_after_days_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DAYS = 30\n")

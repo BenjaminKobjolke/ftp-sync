@@ -36,6 +36,43 @@ class TestParsePhpConfig:
         assert entries[0].ftp_directory == "/www"
         assert entries[0].ignore_patterns == ("docs/", "tests/")
 
+    def test_clear_after_upload_parsed(self, tmp_path: Path) -> None:
+        config = tmp_path / "config_clear.php"
+        config.write_text("""<?php
+            return array(
+                array(
+                    'name' => 'Clear Test',
+                    'ftp' => array(
+                        'root' => '/www',
+                        'server' => 'ftp.example.com',
+                        'username' => 'user',
+                        'password' => 'pass',
+                        'clearAfterUpload' => array('cache/css', 'cache/smarty/templates_c'),
+                    )
+                )
+            );
+        ?>""")
+        entries = parse_php_config(str(config))
+        assert entries[0].clear_remote_dirs == ("cache/css", "cache/smarty/templates_c")
+
+    def test_clear_after_upload_defaults_to_empty(self, tmp_path: Path) -> None:
+        config = tmp_path / "config_noclear.php"
+        config.write_text("""<?php
+            return array(
+                array(
+                    'name' => 'No Clear',
+                    'ftp' => array(
+                        'root' => '/www',
+                        'server' => 'ftp.example.com',
+                        'username' => 'user',
+                        'password' => 'pass',
+                    )
+                )
+            );
+        ?>""")
+        entries = parse_php_config(str(config))
+        assert entries[0].clear_remote_dirs == ()
+
     def test_multiple_entries(self, tmp_path: Path) -> None:
         config = tmp_path / "config_multi.php"
         config.write_text("""<?php
