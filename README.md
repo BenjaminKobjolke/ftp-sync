@@ -12,6 +12,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Old file handling** — when downloading, local files no longer on the server are moved to an `old` subfolder
 - **Multi-directory upload** — sync multiple local folders into one FTP directory (newer file wins on conflicts)
 - **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode)
+- **Clear remote dirs after upload** — `CLEAR_REMOTE_DIRS` / `clearAfterUpload` empties configured remote folders (e.g. server-side caches) after each upload, keeping the folders themselves
 - **No-delete upload** — `--no-delete` / `NO_DELETE` uploads and updates files but never deletes remote files absent locally (keeps existing remote files)
 - **Ignore directories** — configurable list of directory names to skip during sync (both directions)
 - **`.deployignore`** — gitignore-style file placed in synced directories to exclude files/folders from sync
@@ -107,6 +108,10 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 
 # Upload only: never delete remote files that are absent locally (default: false)
 # NO_DELETE = false
+
+# Upload only: comma-separated remote dirs (relative to FTP_DIRECTORY) emptied after upload
+# All files and empty subdirs inside are deleted; the listed dirs themselves are kept
+# CLEAR_REMOTE_DIRS = cache/css, cache/js, cache/smarty/templates_c
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.
@@ -125,6 +130,7 @@ uv run python main.py config_myapp.php --local-dir "C:\my\local\folder"
 - All entries in the config are processed sequentially
 - Ignore patterns from `git.ignore` / `svn.ignore` are applied automatically
 - Supports FTP and FTPS transfer types (SFTP is not supported)
+- `ftp.clearAfterUpload` (array of remote dirs) empties those folders after each upload, keeping the folders themselves
 - Preset inheritance is supported via `preset_<name>.php` files in the same directory
 
 ### `.deployignore`
