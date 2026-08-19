@@ -33,6 +33,7 @@ class Settings:
     ftp_port: int = 0
     delete_source_after_days: int = 0
     no_delete: bool = False
+    clear_remote_dirs: tuple[str, ...] = ()
 
 
 def _parse_comma_list(raw: str) -> tuple[str, ...]:
@@ -105,6 +106,7 @@ def load_settings(ini_file: str) -> Settings:
         ftp_port=_parse_ftp_port(ftp_section),
         delete_source_after_days=_parse_delete_source_after_days(ftp_section),
         no_delete=ftp_section.getboolean("NO_DELETE", False),
+        clear_remote_dirs=_parse_comma_list(ftp_section.get("CLEAR_REMOTE_DIRS", "")),
     )
 
 
@@ -168,4 +170,5 @@ def settings_from_php_entry(
         transfer_type=entry.transfer_type,
         ftp_port=entry.ftp_port,
         hash_cache_file=hash_cache_file,
+        clear_remote_dirs=entry.clear_remote_dirs,
     )

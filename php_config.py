@@ -41,6 +41,7 @@ class PhpDeployEntry:
     subfolder: str = ""
     transfer_type: str = "FTP"
     ftp_port: int = 0
+    clear_remote_dirs: tuple[str, ...] = ()
 
 
 def _extract_variables(content: str) -> dict[str, str]:
@@ -134,6 +135,7 @@ def _entry_from_dict(data: dict[str, Any]) -> PhpDeployEntry | None:
             break
 
     transfer_type = str(ftp.get("transferType", "FTP")).upper()
+    clear_raw = ftp.get("clearAfterUpload")
     raw_port = ftp.get("port", 0)
     ftp_port = int(raw_port) if isinstance(raw_port, (int, str)) and str(raw_port).isdigit() else 0
 
@@ -147,6 +149,7 @@ def _entry_from_dict(data: dict[str, Any]) -> PhpDeployEntry | None:
         subfolder=subfolder,
         transfer_type=transfer_type,
         ftp_port=ftp_port,
+        clear_remote_dirs=tuple(str(d) for d in clear_raw) if isinstance(clear_raw, list) else (),
     )
 
 

@@ -1,5 +1,6 @@
 """FTP file and directory deletion."""
 
+import contextlib
 import ftplib
 import logging
 
@@ -40,6 +41,48 @@ def remove_empty_ftp_dirs(ftp: ftplib.FTP, settings: Settings, deleted_paths: li
             logger.info("Removed empty FTP directory: %s", d)
         except ftplib.error_perm:
             pass
+
+
+def _clear_ftp_dir(ftp: ftplib.FTP, settings: Settings, relative_dir: str, keep_dir: bool) -> int:
+    """Recursively delete all files under a remote dir; remove emptied subdirs unless keep_dir."""
+    abs_dir = build_ftp_path(settings, relative_dir)
+    try:
+        names = ftp.nlst(abs_dir)
+    except ftplib.error_perm:
+        logger.debug("Remote directory not found or empty, skipping: %s", relative_dir)
+        return 0
+
+    deleted = 0
+    for name in names:
+        # nlst may return absolute paths or bare names depending on the server
+        base = name.replace("\\", "/").rsplit("/", 1)[-1]
+        if base in (".", ".."):
+            continue
+        rel_item = f"{relative_dir}/{base}"
+        try:
+            ftp.cwd(build_ftp_path(settings, rel_item))
+            deleted += _clear_ftp_dir(ftp, settings, rel_item, keep_dir=False)
+        except ftplib.error_perm:
+            if delete_ftp_file(ftp, settings, rel_item):
+                deleted += 1
+
+    if not keep_dir:
+        with contextlib.suppress(ftplib.error_perm):
+            ftp.rmd(abs_dir)
+            logger.info("Removed empty FTP directory: %s", relative_dir)
+    return deleted
+
+
+def clear_remote_dirs(ftp: ftplib.FTP, settings: Settings, dirs: tuple[str, ...]) -> int:
+    """Delete all files and empty subdirs under each remote dir; preserve the listed dirs."""
+    total = 0
+    for d in dirs:
+        count = _clear_ftp_dir(ftp, settings, d.strip("/"), keep_dir=True)
+        logger.info("Cleared %d files from remote dir: %s", count, d)
+        total += count
+    # cwd was used for directory detection; restore the sync base directory
+    ftp.cwd(settings.ftp_directory)
+    return total
 
 
 def delete_ftp_files(settings: Settings, ftp_files: list[str], local_files: set[str]) -> int:

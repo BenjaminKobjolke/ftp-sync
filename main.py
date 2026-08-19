@@ -14,7 +14,7 @@ from deployignore import (
     load_deployignore_patterns,
     strip_subfolder_prefix,
 )
-from ftp_delete import delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
+from ftp_delete import clear_remote_dirs, delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
 from ftp_mtime import delete_old_ftp_files
 from ftp_ops import (
     connect_ftp,
@@ -165,6 +165,10 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
                 _upload_with_hash_cache(settings, merged_files, ftp)
             else:
                 _upload_with_ftp_scan(settings, merged_files, ftp)
+
+            if settings.clear_remote_dirs:
+                logger.info("Clearing remote directories after upload...")
+                clear_remote_dirs(ftp, settings, settings.clear_remote_dirs)
 
             if settings.delete_source_after_days > 0:
                 logger.warning("DELETE_SOURCE_AFTER_DAYS is not yet supported for upload direction")
