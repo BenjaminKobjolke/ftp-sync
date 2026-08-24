@@ -184,8 +184,10 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
             )
             logger.info("Syncing FTP files to local...")
             download_args = [(f, settings, local_files) for f in ftp_files]
-            completed_files = sync_files(settings, download_file, download_args)
-            handle_old_files(settings, completed_files, local_files)
+            sync_files(settings, download_file, download_args)
+            # Compare against the remote listing, not this run's downloads: files
+            # skipped as unchanged are still present on the server and must stay.
+            handle_old_files(settings, ftp_files, local_files)
 
             if settings.delete_source_after_days > 0:
                 logger.info(

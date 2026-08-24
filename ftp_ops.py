@@ -147,10 +147,18 @@ def get_ftp_files_recursive(
     path: str = ".",
     ignore_dirs: tuple[str, ...] = (),
 ) -> list[str]:
-    """Recursively list files on the FTP server."""
+    """Recursively list files on the FTP server.
+
+    ``path`` is "." (list the connection's current directory) or a single
+    directory name inside it; deeper levels are handled by the recursion,
+    which cwd's one level at a time. Returned paths are relative to the
+    starting directory with no "./" prefix (e.g. "build/hero/index.js"),
+    matching the relative shape of local file maps.
+    """
     files: list[str] = []
     try:
-        ftp.cwd(path)
+        if path != ".":
+            ftp.cwd(path)
         items = ftp.nlst()
 
         for item in items:
@@ -160,17 +168,15 @@ def get_ftp_files_recursive(
             try:
                 ftp.cwd(item)
                 ftp.cwd("..")
-                if item in ignore_dirs:
-                    logger.debug("Skipping ignored FTP directory: %s", item)
-                    continue
-                subpath = os.path.join(path, item).replace("\\", "/")
-                files.extend(get_ftp_files_recursive(ftp, subpath, ignore_dirs))
             except ftplib.error_perm:
-                file_path = os.path.join(path, item).replace("\\", "/")
-                if path == ".":
-                    files.append(item)
-                else:
-                    files.append(file_path)
+                files.append(item if path == "." else f"{path}/{item}")
+                continue
+
+            if item in ignore_dirs:
+                logger.debug("Skipping ignored FTP directory: %s", item)
+                continue
+            for sub in get_ftp_files_recursive(ftp, item, ignore_dirs):
+                files.append(sub if path == "." else f"{path}/{sub}")
 
         if path != ".":
             ftp.cwd("..")
@@ -182,9 +188,9 @@ def get_ftp_files_recursive(
 
 
 def ensure_local_dir(path: str) -> None:
-    """Create a local directory if it doesn't exist."""
-    if not os.path.exists(path):
-        os.makedirs(path)
+    """Create a local directory if it doesn't exist (thread-safe)."""
+    if path:
+        os.makedirs(path, exist_ok=True)
 
 
 def ensure_ftp_dir(ftp: ftplib.FTP, path: str) -> None:
@@ -265,6 +271,8 @@ def download_file(args: tuple[str, Settings, list[str]]) -> str | None:
         ensure_local_dir(local_dir)
 
         try:
+            # Many servers reject SIZE in ASCII mode (550); force binary first.
+            ftp.voidcmd("TYPE I")
             total_size = ftp.size(ftp_file)
         except (ftplib.error_perm, ftplib.error_temp):
             logger.warning("Couldn't get size for %s, skipping", ftp_file)
