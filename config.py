@@ -3,6 +3,8 @@
 import argparse
 import configparser
 import logging
+import os
+import re
 from dataclasses import dataclass, replace
 
 from php_config import PhpDeployEntry
@@ -152,6 +154,21 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
     if getattr(args, "no_delete", False):
         result = replace(result, no_delete=True)
     return result
+
+
+def entry_hash_cache_file(base: str, entry: PhpDeployEntry, entry_count: int) -> str:
+    """Return the hash cache path for one entry of a PHP config.
+
+    Cache rows are path -> hash with no server in them, so entries sharing one file would
+    see each other's uploads as their own: every entry after the first finds "nothing
+    changed" and never uploads. Host + directory (not the list index) keeps the name stable
+    when entries are reordered.
+    """
+    if entry_count <= 1:
+        return base
+    root, ext = os.path.splitext(base)
+    slug = re.sub(r"[^A-Za-z0-9.-]+", "_", f"{entry.ftp_host}{entry.ftp_directory}").strip("_")
+    return f"{root}_{slug}{ext}"
 
 
 def settings_from_php_entry(

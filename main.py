@@ -6,7 +6,15 @@ import logging
 import os
 import sys
 
-from config import DIRECTION_UP, Settings, apply_overrides, load_settings, parse_arguments, settings_from_php_entry
+from config import (
+    DIRECTION_UP,
+    Settings,
+    apply_overrides,
+    entry_hash_cache_file,
+    load_settings,
+    parse_arguments,
+    settings_from_php_entry,
+)
 from deployignore import (
     ensure_deployignore,
     filter_ignored_paths,
@@ -93,8 +101,10 @@ def _run_php_config(args: object) -> None:
             root_ignore_patterns = strip_subfolder_prefix(root_patterns, entry.subfolder)
 
         extra_ignore = entry.ignore_patterns + tuple(root_ignore_patterns)
-        hash_cache_file = getattr(args, "hash_cache_file", None) or os.path.join(
-            local_directories[0], ".ftp_sync_cache.db"
+        hash_cache_file = entry_hash_cache_file(
+            getattr(args, "hash_cache_file", None) or os.path.join(local_directories[0], ".ftp_sync_cache.db"),
+            entry,
+            len(entries),
         )
 
         settings = settings_from_php_entry(entry, entry_local_dirs, hash_cache_file)
