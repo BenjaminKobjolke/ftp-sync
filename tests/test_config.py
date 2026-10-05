@@ -6,7 +6,39 @@ from pathlib import Path
 
 import pytest
 
-from config import Settings, apply_overrides, load_settings
+from config import Settings, apply_overrides, entry_hash_cache_file, load_settings
+from php_config import PhpDeployEntry
+
+
+def _entry(host: str, directory: str = "/api/vendor") -> PhpDeployEntry:
+    return PhpDeployEntry(
+        name=host, ftp_host=host, ftp_user="user", ftp_pass="pass", ftp_directory=directory, ignore_patterns=()
+    )
+
+
+class TestEntryHashCacheFile:
+    """Tests for the per-entry hash cache path of multi-entry PHP configs."""
+
+    BASE = str(Path("caches") / "vendor.db")
+
+    def test_single_entry_keeps_base(self) -> None:
+        assert entry_hash_cache_file(self.BASE, _entry("a.example.com"), 1) == self.BASE
+
+    def test_entries_on_different_hosts_get_different_files(self) -> None:
+        first = Path(entry_hash_cache_file(self.BASE, _entry("a.example.com"), 2))
+        second = Path(entry_hash_cache_file(self.BASE, _entry("b.example.com"), 2))
+        assert first != second
+        assert first.parent == second.parent == Path(self.BASE).parent
+        assert first.suffix == second.suffix == ".db"
+
+    def test_same_host_different_directory_get_different_files(self) -> None:
+        first = entry_hash_cache_file(self.BASE, _entry("a.example.com", "/v1/vendor"), 2)
+        second = entry_hash_cache_file(self.BASE, _entry("a.example.com", "/v2/vendor"), 2)
+        assert first != second
+
+    def test_name_is_filename_safe(self) -> None:
+        name = Path(entry_hash_cache_file(self.BASE, _entry("a.example.com:2121", "/api/v 1/vendor"), 2)).name
+        assert name == "vendor_a.example.com_2121_api_v_1_vendor.db"
 
 
 class TestSettings:
