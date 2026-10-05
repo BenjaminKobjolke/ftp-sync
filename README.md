@@ -132,6 +132,11 @@ uv run python main.py config_myapp.php --local-dir "C:\my\local\folder"
 - Supports FTP and FTPS transfer types (SFTP is not supported)
 - `ftp.clearAfterUpload` (array of remote dirs) empties those folders after each upload, keeping the folders themselves
 - Preset inheritance is supported via `preset_<name>.php` files in the same directory
+- A config with several entries keeps one hash cache per entry, named `<cache>_<host>_<ftp dir>.db`
+  next to the given `--hash-cache-file` (e.g. `vendor_server.com_api_vendor.db`). A cache shared
+  by all entries made every entry after the first skip its uploads; such an old shared file is no
+  longer read, so the first run after upgrading uploads everything once. Single-entry configs keep
+  the plain file name.
 
 ### `.deployignore`
 
