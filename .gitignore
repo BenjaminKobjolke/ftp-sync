@@ -163,3 +163,7 @@ cython_debug/
 /.idea
 .claude/
 claude-plans
+PLAN.md
+HANDOFF.md
+/PLAN_*.md
+/tickets/
