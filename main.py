@@ -151,6 +151,13 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
     if not settings.ftp_directory:
         logger.error("FTP_DIRECTORY must be set in INI file or via --ftp-dir argument")
         sys.exit(1)
+    # Not auto-created: a missing folder is usually a typo in the path, and SQLite
+    # would otherwise fail later with an opaque "unable to open database file".
+    cache_dir = os.path.dirname(settings.hash_cache_file)
+    if cache_dir and not os.path.isdir(cache_dir):
+        logger.error("HASH_CACHE_FILE folder does not exist: %s", cache_dir)
+        logger.error("Fix HASH_CACHE_FILE in your INI file (or --hash-cache-file), or create the folder.")
+        sys.exit(1)
 
     for local_dir in settings.local_directories:
         os.makedirs(local_dir, exist_ok=True)
