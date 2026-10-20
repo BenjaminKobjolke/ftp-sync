@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from config import Settings, apply_overrides, entry_hash_cache_file, load_settings
+from config import Settings, apply_overrides, entry_hash_cache_file, load_settings, parse_arguments
 from php_config import PhpDeployEntry
 
 
@@ -365,3 +365,15 @@ class TestApplyOverrides:
         args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None)
         result = apply_overrides(settings, args)
         assert result.no_delete is False
+
+
+def test_parse_arguments_compare(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--compare", "out.tsv"])
+    args = parse_arguments()
+    assert args.compare == "out.tsv"
+
+
+def test_parse_arguments_compare_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
+    args = parse_arguments()
+    assert args.compare is None

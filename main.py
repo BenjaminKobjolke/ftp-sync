@@ -23,6 +23,7 @@ from deployignore import (
     strip_subfolder_prefix,
 )
 from ftp_delete import clear_remote_dirs, delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
+from ftp_compare import run_compare
 from ftp_mtime import delete_old_ftp_files
 from ftp_ops import (
     connect_ftp,
@@ -56,6 +57,9 @@ def main() -> None:
     args = parse_arguments()
 
     try:
+        if getattr(args, "compare", None) and args.settings_file.endswith(".php"):
+            logger.error("--compare is only supported with INI settings files")
+            sys.exit(1)
         if args.settings_file.endswith(".php"):
             _run_php_config(args)
         else:
@@ -128,6 +132,9 @@ def _run_ini_config(args: object) -> None:
     """Process an INI config file."""
     settings = load_settings(args.settings_file)  # type: ignore[attr-defined]
     settings = apply_overrides(settings, args)  # type: ignore[arg-type]
+    if getattr(args, "compare", None):
+        run_compare(settings, args.compare)  # type: ignore[attr-defined]
+        return
     _run_sync(settings, (), resync=getattr(args, "resync", False))
 
     if getattr(args, "watcher", False):

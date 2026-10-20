@@ -121,6 +121,12 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--ftp-dir", "-f", help="Override FTP_DIRECTORY from INI file")
     parser.add_argument("--resync", action="store_true", help="Clear hash cache and re-upload all files")
+    parser.add_argument(
+        "--compare",
+        metavar="OUTPUT_FILE",
+        default=None,
+        help="Read-only: list remote files missing or different locally into OUTPUT_FILE (no transfers, no deletes)",
+    )
     parser.add_argument("--watcher", "-w", action="store_true", help="Watch for file changes and sync automatically")
     parser.add_argument(
         "--delete-source-after-days",

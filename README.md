@@ -19,6 +19,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
 - **FTP and FTPS** — plain FTP and FTPS (FTP over TLS) connections
 - **Watcher mode** — `--watcher` watches local files for changes and auto-syncs to FTP (2s debounce)
+- **Compare mode** — `--compare <file>` writes a read-only report of remote files missing or different locally
 - **Source retention cleanup** — optionally delete source files older than N days after sync (e.g., download from FTP, then purge FTP files older than 30 days)
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
 - **CLI overrides** — override `LOCAL_DIRECTORY`, `FTP_DIRECTORY`, and `HASH_CACHE_FILE` from the command line
@@ -34,7 +35,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--resync] [--watcher] [--delete-source-after-days N] [--no-delete]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--no-delete]
 ```
 
 ### Examples
@@ -74,6 +75,28 @@ Use a custom hash cache file location (overrides `HASH_CACHE_FILE` from INI):
 ```
 uv run python main.py settings.ini --hash-cache-file "C:\caches\app-vendor.db"
 ```
+
+Compare the remote tree with the first `LOCAL_DIRECTORY` and write differences as they are found:
+```
+uv run python main.py settings.ini --compare gaps.tsv
+```
+
+### Compare mode
+
+Compare mode walks `FTP_DIRECTORY` and checks files against the first `LOCAL_DIRECTORY`. It honors
+`IGNORE_DIRS`; it does not apply `.deployignore`. It is read-only: it does not upload, download,
+delete, or create local or remote directories. The server must support MLSD listings.
+
+The UTF-8 output file is overwritten and written line by line, so findings remain available if
+the run stops early. Each finding is tab-separated:
+
+- `MISSING<TAB><remote path><TAB><remote size>` — no local file exists (the size field is empty if the server omits it).
+- `SIZE<TAB><remote path><TAB>remote=<n> local=<m>` — sizes differ after checking for ASCII-mode CRLF conversion.
+- `LISTFAIL<TAB><remote dir><TAB><error>` — the directory could not be listed; remaining directories are still checked.
+- `VIRUS<TAB><remote path><TAB><remote size>` — the remote filename starts with `VIRUS_`, regardless of local state.
+
+The final line is `DONE: <dirs> dirs, <files> remote files, <problems> problems`. Progress is logged
+every 25 directories with completed and queued directory counts, files checked, and problems found.
 
 ### INI file format
 
