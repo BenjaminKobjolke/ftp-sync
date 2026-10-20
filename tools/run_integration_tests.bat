@@ -9,14 +9,15 @@ where uv >nul 2>nul
 if %ERRORLEVEL% neq 0 (
     echo ERROR: uv is not installed or not in PATH
     echo Please install uv first: https://docs.astral.sh/uv/getting-started/installation/
-    pause
+    if not "%TICKETS_WATCHER_COMMAND_RUN%"=="1" pause
     exit /b 1
 )
 
 echo Running integration tests...
 echo.
 uv run pytest tests/integration/ -v
-if %ERRORLEVEL% neq 0 (
+set "RESULT=%ERRORLEVEL%"
+if %RESULT% neq 0 (
     echo.
     echo ========================================
     echo  Some integration tests failed!
@@ -28,4 +29,5 @@ if %ERRORLEVEL% neq 0 (
     echo ========================================
 )
 echo.
-pause
+if not "%TICKETS_WATCHER_COMMAND_RUN%"=="1" pause
+exit /b %RESULT%
