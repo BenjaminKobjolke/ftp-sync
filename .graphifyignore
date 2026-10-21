@@ -20,3 +20,9 @@
 /tmp/
 /tools/
 /vendor/
+*.md
+*.json
+*.toml
+*.lock
+LICENSE
+/graphify-out/
