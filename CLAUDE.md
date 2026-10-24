@@ -76,3 +76,19 @@ ftp-sync/
 ## graphify
 
 This project's code directory is . (repo root; non-code files are excluded via .graphifyignore).
+
+## Code Analysis
+
+Run the changed-files analyzer after feature work and bug fixes:
+
+```powershell
+powershell -Command "cd 'D:\GIT\BenjaminKobjolke\ftp-sync'; cmd /c '.\tools\analyze_changed_and_new_files.bat'"
+```
+
+This checks new and modified source files against `HEAD`, including untracked files, while avoiding unrelated existing findings. Use the full project analyzer for an explicit audit, before a release or merge, or when the working tree has no changed source files:
+
+```powershell
+powershell -Command "cd 'D:\GIT\BenjaminKobjolke\ftp-sync'; cmd /c '.\tools\analyze_code.bat'"
+```
+
+Reports are written as per-rule CSV files under `code_analysis_results/`; a missing report means that rule found no issues.
