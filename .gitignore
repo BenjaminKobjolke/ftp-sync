@@ -173,3 +173,5 @@ code_analysis_results/
 .reasonix/
 
 coding-rules.json
+
+tools/analyze_code_config.bat
