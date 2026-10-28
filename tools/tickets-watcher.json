@@ -1,6 +1,6 @@
 {
   "files": {
-    "TICKETS_WATCHER_COMMANDS.md": 2
+    "TICKETS_WATCHER_COMMANDS.md": 3
   },
   "command_check_scripts": [
     "analyze_changed_and_new_files.bat",
@@ -44,5 +44,7 @@
   "analysis_code_quality_answered": true,
   "analysis_command_kinds": {
     "tools\\analyze_changed_and_new_files.bat": "code_quality"
-  }
+  },
+  "analysis_format_command": "tools/fix_ruff_issues.bat",
+  "project_id": 12347
 }
