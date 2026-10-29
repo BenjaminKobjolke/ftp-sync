@@ -9,7 +9,10 @@ import ftp_compare
 from config import Settings
 
 
-def fake_ftp(listings: dict[str, list[tuple[str, dict[str, str]]]], failures: dict[str, Exception] | None = None) -> MagicMock:
+def fake_ftp(
+    listings: dict[str, list[tuple[str, dict[str, str]]]],
+    failures: dict[str, Exception] | None = None,
+) -> MagicMock:
     ftp = MagicMock(spec=ftplib.FTP)
 
     def mlsd(path: str, facts: list[str]) -> list[tuple[str, dict[str, str]]]:
@@ -43,7 +46,7 @@ def test_compare_tree_reports_differences_and_ascii_equivalence(tmp_path: Path) 
     assert lines[:-1] == [
         "MISSING\t/root/a.txt\t10",
         "SIZE\t/root/b.bin\tremote=10 local=4",
-        f"SIZE\t/root/larger.txt\tremote=3 local=8",
+        "SIZE\t/root/larger.txt\tremote=3 local=8",
     ]
     assert lines[-1] == "DONE: 1 dirs, 5 remote files, 3 problems"
     assert stats.dirs == 1 and stats.files == 5 and stats.problems == 3
@@ -79,12 +82,13 @@ def test_compare_tree_lists_failures_continues_and_tags_virus(tmp_path: Path) ->
     assert stats.dirs == 2 and stats.files == 1 and stats.problems == 2
 
 
-def test_compare_tree_progress_log(tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compare_tree_progress_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(ftp_compare, "PROGRESS_EVERY_DIRS", 1)
     ftp = fake_ftp({"/root": []})
-    with caplog.at_level(logging.INFO, logger="ftp_compare"):
-        with (tmp_path / "out").open("w") as out:
-            ftp_compare.compare_tree(ftp, "/root", str(tmp_path), out)
+    with caplog.at_level(logging.INFO, logger="ftp_compare"), (tmp_path / "out").open("w") as out:
+        ftp_compare.compare_tree(ftp, "/root", str(tmp_path), out)
     assert "1 dirs done, 0 queued, 0 files, 0 problems" in caplog.text
 
 
