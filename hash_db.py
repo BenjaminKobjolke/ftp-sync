@@ -2,13 +2,24 @@
 
 import hashlib
 import logging
+from dataclasses import dataclass
 
-from sqlalchemy import String, create_engine, delete, select
+from sqlalchemy import Engine, Integer, String, create_engine, delete, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 logger = logging.getLogger(__name__)
 
 HASH_CHUNK_SIZE = 8192
+# Added after the first release; old caches get them via ALTER TABLE in open_hash_db.
+REMOTE_COLUMNS = {"remote_size": "INTEGER", "remote_modify": "VARCHAR"}
+
+
+@dataclass(frozen=True)
+class RemoteFact:
+    """Size and MLSD modify timestamp of a file as listed on the server ("" when not reported)."""
+
+    size: int
+    modify: str
 
 
 class Base(DeclarativeBase):
@@ -22,6 +33,8 @@ class FileHash(Base):
 
     path: Mapped[str] = mapped_column(String, primary_key=True)
     hash: Mapped[str] = mapped_column(String, nullable=False)
+    remote_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    remote_modify: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 def compute_file_hash(file_path: str) -> str:
@@ -37,23 +50,46 @@ def open_hash_db(db_path: str) -> Session:
     """Open or create the hash database and return a session."""
     engine = create_engine(f"sqlite:///{db_path}")
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     return sessionmaker(bind=engine)()
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    existing = {column["name"] for column in inspect(engine).get_columns(FileHash.__tablename__)}
+    with engine.begin() as connection:
+        for name, sql_type in REMOTE_COLUMNS.items():
+            if name not in existing:
+                connection.execute(text(f"ALTER TABLE {FileHash.__tablename__} ADD COLUMN {name} {sql_type}"))
+
+
+def get_stored_rows(session: Session) -> dict[str, FileHash]:
+    """Read all cache rows, keyed by relative path."""
+    rows = session.execute(select(FileHash)).scalars().all()
+    return {row.path: row for row in rows}
 
 
 def get_stored_hashes(session: Session) -> dict[str, str]:
     """Read all stored hashes into a dict."""
-    rows = session.execute(select(FileHash)).scalars().all()
-    return {row.path: row.hash for row in rows}
+    return {path: row.hash for path, row in get_stored_rows(session).items()}
 
 
-def upsert_hashes(session: Session, entries: dict[str, str]) -> None:
-    """Insert or update hash entries."""
+def upsert_hashes(
+    session: Session,
+    entries: dict[str, str],
+    remote_facts: dict[str, RemoteFact] | None = None,
+) -> None:
+    """Insert or update hash entries with the remote facts seen after upload.
+
+    A path without a fact gets NULL facts: facts from an older upload would be stale.
+    """
+    facts = remote_facts or {}
     for path, file_hash in entries.items():
-        existing = session.get(FileHash, path)
-        if existing:
-            existing.hash = file_hash
-        else:
-            session.add(FileHash(path=path, hash=file_hash))
+        fact = facts.get(path)
+        row = session.get(FileHash, path) or FileHash(path=path)
+        row.hash = file_hash
+        row.remote_size = fact.size if fact else None
+        row.remote_modify = fact.modify if fact else None
+        session.add(row)
     session.commit()
 
 

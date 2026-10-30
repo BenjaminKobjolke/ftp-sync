@@ -14,6 +14,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode)
 - **Clear remote dirs after upload** — `CLEAR_REMOTE_DIRS` / `clearAfterUpload` empties configured remote folders (e.g. server-side caches) after each upload, keeping the folders themselves
 - **No-delete upload** — `--no-delete` / `NO_DELETE` uploads and updates files but never deletes remote files absent locally (keeps existing remote files)
+- **Verify remote** — `--verify-remote` / `VERIFY_REMOTE` (hash-cache upload) lists the server first and re-uploads files that changed or went missing there. The hash cache alone only knows what this machine uploaded, so a file overwritten from elsewhere (another machine, another cache, a manual upload) would otherwise be skipped forever, even when it has the same size
 - **Ignore directories** — configurable list of directory names to skip during sync (both directions)
 - **`.deployignore`** — gitignore-style file placed in synced directories to exclude files/folders from sync
 - **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
@@ -35,7 +36,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--no-delete]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--no-delete] [--verify-remote]
 ```
 
 ### Examples
@@ -70,6 +71,12 @@ Upload without deleting remote files that are absent locally (additive upload):
 ```
 uv run python main.py settings.ini --no-delete
 ```
+
+Hash-cache upload that also re-uploads files changed or missing on the server (works with PHP configs too):
+```
+uv run python main.py config_myapp_vendor.php --local-dir ./vendor --hash-cache-file ./deploy/vendor.db --verify-remote
+```
+The first run with an older cache adopts the server's timestamps for files whose size matches, and re-uploads the ones whose size differs.
 
 Use a custom hash cache file location (overrides `HASH_CACHE_FILE` from INI):
 ```
@@ -131,6 +138,10 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 
 # Upload only: never delete remote files that are absent locally (default: false)
 # NO_DELETE = false
+
+# Upload with hash cache only: list the server first and re-upload files changed or missing
+# there (the cache cannot see uploads made from elsewhere). Costs one MLSD walk per run.
+# VERIFY_REMOTE = false
 
 # Upload only: comma-separated remote dirs (relative to FTP_DIRECTORY) emptied after upload
 # All files and empty subdirs inside are deleted; the listed dirs themselves are kept

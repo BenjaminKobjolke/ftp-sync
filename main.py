@@ -22,8 +22,8 @@ from deployignore import (
     load_deployignore_patterns,
     strip_subfolder_prefix,
 )
-from ftp_delete import clear_remote_dirs, delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
 from ftp_compare import run_compare
+from ftp_delete import clear_remote_dirs, delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
 from ftp_mtime import delete_old_ftp_files
 from ftp_ops import (
     connect_ftp,
@@ -34,6 +34,7 @@ from ftp_ops import (
 )
 from hash_db import delete_paths, filter_changed_files, find_deleted_paths, open_hash_db, upsert_hashes
 from php_config import parse_php_config
+from remote_verify import uploaded_facts, with_remote_drift
 from sync import build_merged_file_map, get_local_files_recursive, handle_old_files, sync_files
 from watcher import watch_and_sync
 
@@ -111,7 +112,9 @@ def _run_php_config(args: object) -> None:
             len(entries),
         )
 
-        settings = settings_from_php_entry(entry, entry_local_dirs, hash_cache_file)
+        settings = settings_from_php_entry(
+            entry, entry_local_dirs, hash_cache_file, verify_remote=getattr(args, "verify_remote", False)
+        )
 
         _run_sync(settings, extra_ignore, resync=getattr(args, "resync", False))
         sync_configs.append((settings, extra_ignore))
@@ -238,12 +241,15 @@ def _upload_with_hash_cache(settings: Settings, merged_files: dict[str, str], ft
         len(changed_files),
         len(merged_files) - len(changed_files),
     )
+    if settings.verify_remote:
+        changed_files = with_remote_drift(ftp, settings, session, merged_files, changed_files)
 
     if changed_files:
         logger.info("Syncing changed local files to FTP...")
         upload_args = [(rel, abs_path, settings, None) for rel, abs_path in changed_files.items()]
         completed = sync_files(settings, upload_file, upload_args)
-        upsert_hashes(session, {rel: current_hashes[rel] for rel in completed})
+        facts = uploaded_facts(ftp, settings, completed) if settings.verify_remote and completed else None
+        upsert_hashes(session, {rel: current_hashes[rel] for rel in completed}, facts)
 
     if settings.no_delete:
         logger.info("no-delete mode: skipping remote deletions")

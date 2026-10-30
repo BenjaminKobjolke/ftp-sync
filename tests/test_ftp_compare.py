@@ -7,6 +7,7 @@ import pytest
 
 import ftp_compare
 from config import Settings
+from hash_db import RemoteFact
 
 
 def fake_ftp(
@@ -16,7 +17,7 @@ def fake_ftp(
     ftp = MagicMock(spec=ftplib.FTP)
 
     def mlsd(path: str, facts: list[str]) -> list[tuple[str, dict[str, str]]]:
-        assert facts == ["type", "size"]
+        assert facts == ftp_compare.MLSD_FACTS
         if failures and path in failures:
             raise failures[path]
         return listings[path]
@@ -30,14 +31,19 @@ def test_compare_tree_reports_differences_and_ascii_equivalence(tmp_path: Path) 
     (tmp_path / "crlf.txt").write_bytes(b"one\r\ntwo\r\n")
     (tmp_path / "larger.txt").write_bytes(b"not crlf")
     (tmp_path / "same.txt").write_bytes(b"same")
-    ftp = fake_ftp({"/root": [
-        ("a.txt", {"type": "file", "size": "10"}),
-        ("b.bin", {"type": "file", "size": "10"}),
-        ("crlf.txt", {"type": "file", "size": "8"}),
-        ("larger.txt", {"type": "file", "size": "3"}),
-        ("same.txt", {"type": "file", "size": "4"}),
-        (".", {"type": "cdir"}), ("..", {"type": "pdir"}),
-    ]})
+    ftp = fake_ftp(
+        {
+            "/root": [
+                ("a.txt", {"type": "file", "size": "10"}),
+                ("b.bin", {"type": "file", "size": "10"}),
+                ("crlf.txt", {"type": "file", "size": "8"}),
+                ("larger.txt", {"type": "file", "size": "3"}),
+                ("same.txt", {"type": "file", "size": "4"}),
+                (".", {"type": "cdir"}),
+                ("..", {"type": "pdir"}),
+            ]
+        }
+    )
 
     with (tmp_path / "report.tsv").open("w", encoding="utf-8", buffering=1) as out:
         stats = ftp_compare.compare_tree(ftp, "/root/", str(tmp_path), out)
@@ -50,18 +56,21 @@ def test_compare_tree_reports_differences_and_ascii_equivalence(tmp_path: Path) 
     ]
     assert lines[-1] == "DONE: 1 dirs, 5 remote files, 3 problems"
     assert stats.dirs == 1 and stats.files == 5 and stats.problems == 3
-    ftp.mlsd.assert_called_once_with("/root", facts=["type", "size"])
+    ftp.mlsd.assert_called_once_with("/root", facts=ftp_compare.MLSD_FACTS)
     for operation in ("storbinary", "retrbinary", "delete", "mkd", "rmd"):
         getattr(ftp, operation).assert_not_called()
 
 
 def test_compare_tree_walks_nested_dirs_and_skips_ignored(tmp_path: Path) -> None:
-    ftp = fake_ftp({
-        "/root": [("sub", {"type": "dir"}), ("skip", {"type": "dir"})],
-        "/root/sub": [("missing", {"type": "file", "size": "1"})],
-    })
+    ftp = fake_ftp(
+        {
+            "/root": [("sub", {"type": "dir"}), ("skip", {"type": "dir"})],
+            "/root/sub": [("missing", {"type": "file", "size": "1"})],
+        }
+    )
     (tmp_path / "sub").mkdir()
     from io import StringIO
+
     out = StringIO()
     stats = ftp_compare.compare_tree(ftp, "/root", str(tmp_path), out, ("skip",))
     assert "MISSING\t/root/sub/missing\t1" in out.getvalue()
@@ -75,6 +84,7 @@ def test_compare_tree_lists_failures_continues_and_tags_virus(tmp_path: Path) ->
         {"/root/sub": ftplib.error_perm("550 denied")},
     )
     from io import StringIO
+
     out = StringIO()
     stats = ftp_compare.compare_tree(ftp, "/root", str(tmp_path), out)
     assert "VIRUS\t/root/VIRUS_php_shell_x.php\t12" in out.getvalue()
@@ -109,3 +119,39 @@ def test_run_compare_fails_before_connect(
         ftp_compare.run_compare(settings, str(output_parent / "report.tsv"))
     assert error.value.code == 1
     connect.assert_not_called()
+
+
+def test_list_remote_facts_walks_tree_relative_to_root() -> None:
+    ftp = fake_ftp(
+        {
+            "/root": [
+                ("a.php", {"type": "file", "size": "5", "modify": "20261024072300"}),
+                ("sub", {"type": "dir"}),
+                ("skip", {"type": "dir"}),
+                (".", {"type": "cdir"}),
+            ],
+            "/root/sub": [("b.php", {"type": "file", "size": "7"})],
+        }
+    )
+    facts = ftp_compare.list_remote_facts(ftp, "/root/", ("skip",))
+    assert facts == {"a.php": RemoteFact(5, "20261024072300"), "sub/b.php": RemoteFact(7, "")}
+
+
+def test_list_remote_facts_only_lists_given_subdirs() -> None:
+    ftp = fake_ftp(
+        {
+            "/root": [("a.php", {"type": "file", "size": "5"}), ("sub", {"type": "dir"})],
+            "/root/sub": [("b.php", {"type": "file", "size": "7"})],
+        }
+    )
+    facts = ftp_compare.list_remote_facts(ftp, "/root", subdirs={"sub"})
+    assert facts == {"sub/b.php": RemoteFact(7, "")}
+    assert [call.args[0] for call in ftp.mlsd.call_args_list] == ["/root/sub"]
+
+
+def test_list_remote_facts_skips_unlistable_dir() -> None:
+    ftp = fake_ftp(
+        {"/root": [("sub", {"type": "dir"}), ("a.php", {"type": "file", "size": "5"})]},
+        {"/root/sub": ftplib.error_perm("550 denied")},
+    )
+    assert ftp_compare.list_remote_facts(ftp, "/root") == {"a.php": RemoteFact(5, "")}

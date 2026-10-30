@@ -1,13 +1,16 @@
 """Tests for hash_db module."""
 
+import sqlite3
 from pathlib import Path
 
 from hash_db import (
+    RemoteFact,
     compute_file_hash,
     delete_paths,
     filter_changed_files,
     find_deleted_paths,
     get_stored_hashes,
+    get_stored_rows,
     open_hash_db,
     upsert_hashes,
 )
@@ -69,6 +72,35 @@ class TestUpsertAndGetHashes:
         upsert_hashes(session, {"a.txt": "new_hash"})
         stored = get_stored_hashes(session)
         assert stored["a.txt"] == "new_hash"
+        session.close()
+
+
+class TestRemoteFacts:
+    """Tests for the remote size/modify columns used by --verify-remote."""
+
+    def test_old_cache_gets_remote_columns(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "cache.db"
+        with sqlite3.connect(db_path) as raw:
+            raw.execute("CREATE TABLE files (path VARCHAR PRIMARY KEY, hash VARCHAR NOT NULL)")
+            raw.execute("INSERT INTO files VALUES ('a.txt', 'h1')")
+        session = open_hash_db(str(db_path))
+        row = get_stored_rows(session)["a.txt"]
+        assert (row.hash, row.remote_size, row.remote_modify) == ("h1", None, None)
+        session.close()
+
+    def test_upsert_stores_remote_facts(self, tmp_path: Path) -> None:
+        session = open_hash_db(str(tmp_path / "cache.db"))
+        upsert_hashes(session, {"a.txt": "h1"}, {"a.txt": RemoteFact(12, "20261030063200")})
+        row = get_stored_rows(session)["a.txt"]
+        assert (row.remote_size, row.remote_modify) == (12, "20261030063200")
+        session.close()
+
+    def test_upsert_without_facts_clears_stale_facts(self, tmp_path: Path) -> None:
+        session = open_hash_db(str(tmp_path / "cache.db"))
+        upsert_hashes(session, {"a.txt": "h1"}, {"a.txt": RemoteFact(12, "20261030063200")})
+        upsert_hashes(session, {"a.txt": "h2"})
+        row = get_stored_rows(session)["a.txt"]
+        assert (row.hash, row.remote_size, row.remote_modify) == ("h2", None, None)
         session.close()
 
 

@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from config import Settings, apply_overrides, entry_hash_cache_file, load_settings, parse_arguments
+from config import (
+    Settings,
+    apply_overrides,
+    entry_hash_cache_file,
+    load_settings,
+    parse_arguments,
+    settings_from_php_entry,
+)
 from php_config import PhpDeployEntry
 
 
@@ -139,6 +146,16 @@ class TestLoadSettings:
         ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nNO_DELETE = true\n")
         settings = load_settings(str(ini_file))
         assert settings.no_delete is True
+
+    def test_verify_remote_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nVERIFY_REMOTE = true\n")
+        assert load_settings(str(ini_file)).verify_remote is True
+
+    def test_verify_remote_defaults_to_false(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        assert load_settings(str(ini_file)).verify_remote is False
 
     def test_no_delete_defaults_to_false(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
@@ -365,6 +382,24 @@ class TestApplyOverrides:
         args = argparse.Namespace(local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None)
         result = apply_overrides(settings, args)
         assert result.no_delete is False
+
+    def test_verify_remote_override(self) -> None:
+        settings = self._base_settings()
+        args = argparse.Namespace(
+            local_dir=None, ftp_dir=None, delete_source_after_days=None, hash_cache_file=None, verify_remote=True
+        )
+        assert apply_overrides(settings, args).verify_remote is True
+
+
+def test_settings_from_php_entry_passes_verify_remote() -> None:
+    settings = settings_from_php_entry(_entry("server.com"), ("local",), "cache.db", verify_remote=True)
+    assert settings.verify_remote is True
+    assert settings_from_php_entry(_entry("server.com"), ("local",)).verify_remote is False
+
+
+def test_parse_arguments_verify_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--verify-remote"])
+    assert parse_arguments().verify_remote is True
 
 
 def test_parse_arguments_compare(monkeypatch: pytest.MonkeyPatch) -> None:

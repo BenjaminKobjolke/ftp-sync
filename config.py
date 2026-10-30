@@ -36,6 +36,7 @@ class Settings:
     delete_source_after_days: int = 0
     no_delete: bool = False
     clear_remote_dirs: tuple[str, ...] = ()
+    verify_remote: bool = False
 
 
 def _parse_comma_list(raw: str) -> tuple[str, ...]:
@@ -109,6 +110,7 @@ def load_settings(ini_file: str) -> Settings:
         delete_source_after_days=_parse_delete_source_after_days(ftp_section),
         no_delete=ftp_section.getboolean("NO_DELETE", False),
         clear_remote_dirs=_parse_comma_list(ftp_section.get("CLEAR_REMOTE_DIRS", "")),
+        verify_remote=ftp_section.getboolean("VERIFY_REMOTE", False),
     )
 
 
@@ -143,6 +145,11 @@ def parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="Upload mode: never delete remote files absent locally (keeps existing remote files)",
     )
+    parser.add_argument(
+        "--verify-remote",
+        action="store_true",
+        help="Hash-cache upload: list the server first and re-upload files changed or missing there",
+    )
     return parser.parse_args()
 
 
@@ -159,6 +166,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         result = replace(result, hash_cache_file=args.hash_cache_file)
     if getattr(args, "no_delete", False):
         result = replace(result, no_delete=True)
+    if getattr(args, "verify_remote", False):
+        result = replace(result, verify_remote=True)
     return result
 
 
@@ -181,6 +190,7 @@ def settings_from_php_entry(
     entry: PhpDeployEntry,
     local_directories: tuple[str, ...],
     hash_cache_file: str = "",
+    verify_remote: bool = False,
 ) -> Settings:
     """Create Settings from a PHP deploy config entry."""
     return Settings(
@@ -194,4 +204,5 @@ def settings_from_php_entry(
         ftp_port=entry.ftp_port,
         hash_cache_file=hash_cache_file,
         clear_remote_dirs=entry.clear_remote_dirs,
+        verify_remote=verify_remote,
     )
