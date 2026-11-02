@@ -25,6 +25,7 @@ in `load_settings()` (`config.py`).
 | `IGNORE_DIRS` | *(none)* | Comma-separated directory *names* skipped everywhere, e.g. `IGNORE_DIRS = _old, _alt, Unsortiert`. The `old` directory is always skipped automatically. For gitignore-style path patterns, use `.deployignore` instead — see [DEPLOYIGNORE.md](DEPLOYIGNORE.md). |
 | `HASH_CACHE_FILE` | *(empty)* | Path to a SQLite hash cache DB (upload direction only). When set, skips scanning the FTP server and uploads only files whose content hash changed. Can be overridden with `--hash-cache-file`. |
 | `DELETE_SOURCE_AFTER_DAYS` | `0` | When `DIRECTION = down`, deletes files from the FTP server older than N days after a successful sync. `0` disables. Not yet supported for `DIRECTION = up`. Must be `>= 0`. Can be overridden with `--delete-source-after-days`. |
+| `DELETE_SOURCE_AFTER_DOWNLOAD` | `false` | When `DIRECTION = down`, deletes each remote file whose local copy exists with the same size (downloaded this run or already present), then removes emptied remote folders. Failed or partial downloads stay on the server. Local files missing on the server stay in place instead of moving to `old`. Ignored (with a warning) for `DIRECTION = up`. Can be forced on with `--delete-source-after-download`. |
 | `NO_DELETE` | `false` | Upload direction only: never delete remote files that are absent locally (keeps stray remote files). Can be forced on with `--no-delete`. |
 | `CLEAR_REMOTE_DIRS` | *(none)* | Upload direction only: comma-separated remote dirs (relative to `FTP_DIRECTORY`) emptied after each upload, e.g. `CLEAR_REMOTE_DIRS = cache/css, cache/smarty/templates_c`. Deletes all files and empty subdirs inside; the listed dirs themselves are kept. Runs even with `NO_DELETE`. PHP config equivalent: `ftp.clearAfterUpload` array. See [CLEAR_REMOTE_DIRS.md](CLEAR_REMOTE_DIRS.md). |
 
@@ -38,6 +39,7 @@ Some settings can be overridden per run without editing the INI file, via `apply
 | `--local-dir`, `-l` | `LOCAL_DIRECTORY` |
 | `--ftp-dir`, `-f` | `FTP_DIRECTORY` |
 | `--delete-source-after-days` | `DELETE_SOURCE_AFTER_DAYS` |
+| `--delete-source-after-download` | `DELETE_SOURCE_AFTER_DOWNLOAD` (forces `true`) |
 | `--hash-cache-file` | `HASH_CACHE_FILE` |
 | `--no-delete` | `NO_DELETE` (forces `true`) |
 | `--resync` | not an INI setting — clears the hash cache DB before syncing |

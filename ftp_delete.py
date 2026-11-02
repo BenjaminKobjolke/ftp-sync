@@ -3,6 +3,7 @@
 import contextlib
 import ftplib
 import logging
+import os
 
 from config import Settings
 from ftp_ops import build_ftp_path, get_ftp_connection
@@ -20,6 +21,30 @@ def delete_ftp_file(ftp: ftplib.FTP, settings: Settings, relative_path: str) -> 
     except ftplib.error_perm:
         logger.warning("Could not delete FTP file: %s", relative_path)
         return False
+
+
+def delete_downloaded_ftp_files(ftp: ftplib.FTP, settings: Settings, ftp_files: list[str]) -> int:
+    """Delete remote files whose local copy exists with the same size; return the count deleted.
+
+    Failed or partial downloads keep their remote file, so the next run can retry them.
+    """
+    ftp.voidcmd("TYPE I")  # many servers reject SIZE in ASCII mode
+    deleted: list[str] = []
+    for rel_path in ftp_files:
+        local_path = os.path.join(settings.local_directories[0], rel_path)
+        if not os.path.isfile(local_path):
+            continue
+        try:
+            remote_size = ftp.size(build_ftp_path(settings, rel_path))
+        except (ftplib.error_perm, ftplib.error_temp):
+            logger.warning("Couldn't get size for %s, keeping it on FTP", rel_path)
+            continue
+        if remote_size == os.path.getsize(local_path) and delete_ftp_file(ftp, settings, rel_path):
+            deleted.append(rel_path)
+
+    if deleted:
+        remove_empty_ftp_dirs(ftp, settings, deleted)
+    return len(deleted)
 
 
 def remove_empty_ftp_dirs(ftp: ftplib.FTP, settings: Settings, deleted_paths: list[str]) -> None:

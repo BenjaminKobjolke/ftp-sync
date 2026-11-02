@@ -34,6 +34,7 @@ class Settings:
     transfer_type: str = "FTP"
     ftp_port: int = 0
     delete_source_after_days: int = 0
+    delete_source_after_download: bool = False
     no_delete: bool = False
     clear_remote_dirs: tuple[str, ...] = ()
     verify_remote: bool = False
@@ -108,6 +109,7 @@ def load_settings(ini_file: str) -> Settings:
         transfer_type=transfer_type,
         ftp_port=_parse_ftp_port(ftp_section),
         delete_source_after_days=_parse_delete_source_after_days(ftp_section),
+        delete_source_after_download=ftp_section.getboolean("DELETE_SOURCE_AFTER_DOWNLOAD", False),
         no_delete=ftp_section.getboolean("NO_DELETE", False),
         clear_remote_dirs=_parse_comma_list(ftp_section.get("CLEAR_REMOTE_DIRS", "")),
         verify_remote=ftp_section.getboolean("VERIFY_REMOTE", False),
@@ -137,6 +139,11 @@ def parse_arguments() -> argparse.Namespace:
         help="Delete source files older than N days after sync (0=disabled)",
     )
     parser.add_argument(
+        "--delete-source-after-download",
+        action="store_true",
+        help="Download mode: delete each remote file once an equal-size local copy exists",
+    )
+    parser.add_argument(
         "--hash-cache-file",
         help="Override HASH_CACHE_FILE from INI file (path to SQLite hash cache)",
     )
@@ -164,6 +171,8 @@ def apply_overrides(settings: Settings, args: argparse.Namespace) -> Settings:
         result = replace(result, delete_source_after_days=args.delete_source_after_days)
     if args.hash_cache_file:
         result = replace(result, hash_cache_file=args.hash_cache_file)
+    if getattr(args, "delete_source_after_download", False):
+        result = replace(result, delete_source_after_download=True)
     if getattr(args, "no_delete", False):
         result = replace(result, no_delete=True)
     if getattr(args, "verify_remote", False):

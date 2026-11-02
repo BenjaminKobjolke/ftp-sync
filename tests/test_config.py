@@ -157,6 +157,13 @@ class TestLoadSettings:
         ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
         assert load_settings(str(ini_file)).verify_remote is False
 
+    def test_delete_source_after_download_parsed(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text(
+            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DOWNLOAD = true\n"
+        )
+        assert load_settings(str(ini_file)).delete_source_after_download is True
+
     def test_no_delete_defaults_to_false(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
@@ -412,3 +419,10 @@ def test_parse_arguments_compare_defaults_to_none(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
     args = parse_arguments()
     assert args.compare is None
+
+
+def test_parse_arguments_delete_source_after_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--delete-source-after-download"])
+    settings = Settings(local_directories=("l",), ftp_directory="/", ftp_host="h", ftp_user="u", ftp_pass="p")
+    assert apply_overrides(settings, parse_arguments()).delete_source_after_download is True
+    assert settings.delete_source_after_download is False

@@ -108,3 +108,26 @@ class TestUploadWithHashCacheVerifyRemote:
         main._upload_with_hash_cache(settings, merged, MagicMock(spec=ftplib.FTP))
 
         sync.assert_not_called()
+
+
+class TestRunSyncDeleteSourceAfterDownload:
+    def _run(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, flag: bool) -> list[str]:
+        calls: list[str] = []
+        monkeypatch.setattr(main, "connect_ftp", lambda s: MagicMock(spec=ftplib.FTP))
+        monkeypatch.setattr(main, "get_ftp_files_recursive", lambda ftp, ignore_dirs: ["run/a.txt"])
+        monkeypatch.setattr(main, "sync_files", lambda s, f, a: [])
+        monkeypatch.setattr(main, "handle_old_files", lambda *a: calls.append("old"))
+        monkeypatch.setattr(main, "delete_downloaded_ftp_files", lambda ftp, s, files: calls.append("delete") or 1)
+        settings = dataclasses.replace(
+            _settings(tmp_path, ""), direction="down", delete_source_after_download=flag
+        )
+        main._run_sync(settings, (), resync=False)
+        return calls
+
+    def test_flag_deletes_remote_and_keeps_local_files_in_place(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._run(tmp_path, monkeypatch, flag=True) == ["delete"]
+
+    def test_without_flag_old_files_are_moved(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert self._run(tmp_path, monkeypatch, flag=False) == ["old"]

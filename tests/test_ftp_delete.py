@@ -1,10 +1,11 @@
 """Tests for FTP deletion helpers."""
 
 import ftplib
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from config import Settings
-from ftp_delete import clear_remote_dirs
+from ftp_delete import clear_remote_dirs, delete_downloaded_ftp_files
 
 
 def _settings() -> Settings:
@@ -83,3 +84,45 @@ class TestClearRemoteDirs:
         ftp = _mock_ftp({"/cache/css": ["a.css"]})
         clear_remote_dirs(ftp, _settings(), ("cache/css",))
         assert ftp.cwd.call_args_list[-1].args[0] == "/"
+
+
+class TestDeleteDownloadedFtpFiles:
+    def _run(self, tmp_path: Path, remote_sizes: dict[str, int | Exception]) -> tuple[int, MagicMock]:
+        settings = Settings(
+            local_directories=(str(tmp_path),),
+            ftp_directory="/ev",
+            ftp_host="host",
+            ftp_user="user",
+            ftp_pass="pass",
+        )
+        ftp = MagicMock(spec=ftplib.FTP)
+
+        def size(path: str) -> int:
+            value = remote_sizes[path.removeprefix("/ev/")]
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        ftp.size.side_effect = size
+        ftp.rmd.side_effect = ftplib.error_perm("550 not empty")
+        return delete_downloaded_ftp_files(ftp, settings, list(remote_sizes)), ftp
+
+    def test_deletes_only_files_with_matching_local_copy(self, tmp_path: Path) -> None:
+        (tmp_path / "run").mkdir()
+        (tmp_path / "run" / "same.txt").write_bytes(b"abc")
+        (tmp_path / "run" / "partial.txt").write_bytes(b"a")
+        (tmp_path / "run" / "err.txt").write_bytes(b"abc")
+
+        deleted, ftp = self._run(
+            tmp_path,
+            {
+                "run/same.txt": 3,
+                "run/partial.txt": 3,
+                "run/missing.txt": 3,
+                "run/err.txt": ftplib.error_perm("550 no size"),
+            },
+        )
+
+        assert deleted == 1
+        ftp.delete.assert_called_once_with("/ev/run/same.txt")
+        ftp.rmd.assert_called_once_with("/ev/run")

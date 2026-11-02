@@ -23,7 +23,13 @@ from deployignore import (
     strip_subfolder_prefix,
 )
 from ftp_compare import run_compare
-from ftp_delete import clear_remote_dirs, delete_ftp_file, delete_ftp_files, remove_empty_ftp_dirs
+from ftp_delete import (
+    clear_remote_dirs,
+    delete_downloaded_ftp_files,
+    delete_ftp_file,
+    delete_ftp_files,
+    remove_empty_ftp_dirs,
+)
 from ftp_mtime import delete_old_ftp_files
 from ftp_ops import (
     connect_ftp,
@@ -199,6 +205,8 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
 
             if settings.delete_source_after_days > 0:
                 logger.warning("DELETE_SOURCE_AFTER_DAYS is not yet supported for upload direction")
+            if settings.delete_source_after_download:
+                logger.warning("DELETE_SOURCE_AFTER_DOWNLOAD only applies to the download direction")
         else:
             logger.info("Getting file lists...")
             deploy_spec = load_deployignore(settings.local_directories[0], extra_ignore_patterns)
@@ -212,9 +220,14 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
             logger.info("Syncing FTP files to local...")
             download_args = [(f, settings, local_files) for f in ftp_files]
             sync_files(settings, download_file, download_args)
-            # Compare against the remote listing, not this run's downloads: files
-            # skipped as unchanged are still present on the server and must stay.
-            handle_old_files(settings, ftp_files, local_files)
+            if settings.delete_source_after_download:
+                # Remote is emptied each run, so earlier downloads must not be moved to old/.
+                deleted_count = delete_downloaded_ftp_files(ftp, settings, ftp_files)
+                logger.info("Source cleanup: deleted %d downloaded files from FTP", deleted_count)
+            else:
+                # Compare against the remote listing, not this run's downloads: files
+                # skipped as unchanged are still present on the server and must stay.
+                handle_old_files(settings, ftp_files, local_files)
 
             if settings.delete_source_after_days > 0:
                 logger.info(

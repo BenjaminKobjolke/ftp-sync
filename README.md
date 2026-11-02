@@ -22,6 +22,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Watcher mode** — `--watcher` watches local files for changes and auto-syncs to FTP (2s debounce)
 - **Compare mode** — `--compare <file>` writes a read-only report of remote files missing or different locally
 - **Source retention cleanup** — optionally delete source files older than N days after sync (e.g., download from FTP, then purge FTP files older than 30 days)
+- **Delete after download** — `--delete-source-after-download` / `DELETE_SOURCE_AFTER_DOWNLOAD` (download only) deletes each remote file once a local copy of the same size exists, then removes emptied remote folders. Local files no longer on the server stay in place (no `old` move), so the server works as an outbox
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
 - **CLI overrides** — override `LOCAL_DIRECTORY`, `FTP_DIRECTORY`, and `HASH_CACHE_FILE` from the command line
 - **Auto-create FTP directories** — target FTP directory is created if it does not exist
@@ -36,7 +37,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--no-delete] [--verify-remote]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--delete-source-after-download] [--no-delete] [--verify-remote]
 ```
 
 ### Examples
@@ -60,6 +61,11 @@ uv run python main.py config_myapp.php --local-dir ./myproject --watcher
 Download and delete FTP files older than 30 days:
 ```
 uv run python main.py settings.ini --delete-source-after-days 30
+```
+
+Download and delete each downloaded file from FTP (move files off the server):
+```
+uv run python main.py settings.ini --delete-source-after-download
 ```
 
 Force full re-upload by clearing the hash cache:
@@ -135,6 +141,10 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 # Delete source files older than N days after sync (default: 0 = disabled)
 # When DIRECTION = down, deletes files from FTP older than this many days
 # DELETE_SOURCE_AFTER_DAYS = 30
+
+# Download only: delete each remote file once a local copy of the same size exists (default: false)
+# Local files missing on the server are then left in place instead of moved to 'old'
+# DELETE_SOURCE_AFTER_DOWNLOAD = false
 
 # Upload only: never delete remote files that are absent locally (default: false)
 # NO_DELETE = false
