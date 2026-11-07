@@ -42,6 +42,14 @@ class PhpDeployEntry:
     transfer_type: str = "FTP"
     ftp_port: int = 0
     clear_remote_dirs: tuple[str, ...] = ()
+    concurrent_uploads: int = 1
+
+
+def _digit_int(raw: Any, default: int) -> int:
+    """Return an integer or digit string as an int, otherwise the default."""
+    if isinstance(raw, (int, str)) and str(raw).isdigit():
+        return int(raw)
+    return default
 
 
 def _extract_variables(content: str) -> dict[str, str]:
@@ -136,8 +144,8 @@ def _entry_from_dict(data: dict[str, Any]) -> PhpDeployEntry | None:
 
     transfer_type = str(ftp.get("transferType", "FTP")).upper()
     clear_raw = ftp.get("clearAfterUpload")
-    raw_port = ftp.get("port", 0)
-    ftp_port = int(raw_port) if isinstance(raw_port, (int, str)) and str(raw_port).isdigit() else 0
+    ftp_port = _digit_int(ftp.get("port", 0), 0)
+    concurrent_uploads = _digit_int(ftp.get("concurrentUploads"), 1) or 1
 
     return PhpDeployEntry(
         name=str(data.get("name", "")),
@@ -150,6 +158,7 @@ def _entry_from_dict(data: dict[str, Any]) -> PhpDeployEntry | None:
         transfer_type=transfer_type,
         ftp_port=ftp_port,
         clear_remote_dirs=tuple(str(d) for d in clear_raw) if isinstance(clear_raw, list) else (),
+        concurrent_uploads=concurrent_uploads,
     )
 
 

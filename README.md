@@ -175,6 +175,7 @@ uv run python main.py config_myapp.php --local-dir "C:\my\local\folder"
 - Ignore patterns from `git.ignore` / `svn.ignore` are applied automatically
 - Supports FTP and FTPS transfer types (SFTP is not supported)
 - `ftp.clearAfterUpload` (array of remote dirs) empties those folders after each upload, keeping the folders themselves
+- `ftp.concurrentUploads` (integer) sets the number of parallel uploads for that entry, like `CONCURRENT_UPLOADS_OR_DOWNLOADS` in an INI file; missing, zero, negative, or non-numeric values use 1. The deploy-tool ignores unknown `ftp` keys, so this key is compatible with the same config file there.
 - Preset inheritance is supported via `preset_<name>.php` files in the same directory
 - A config with several entries keeps one hash cache per entry, named `<cache>_<host>_<ftp dir>.db`
   next to the given `--hash-cache-file` (e.g. `vendor_server.com_api_vendor.db`). A cache shared

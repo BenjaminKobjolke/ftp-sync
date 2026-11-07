@@ -30,6 +30,7 @@
 				'server'	 => $ftpServer,
 				'username'	 => $ftpUser,
 				'password'	 => $ftpPassword,
+				'concurrentUploads' => 4, // Defaults to 1 when omitted.
 			)
 		)
 	);

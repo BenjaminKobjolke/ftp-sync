@@ -404,6 +404,14 @@ def test_settings_from_php_entry_passes_verify_remote() -> None:
     assert settings_from_php_entry(_entry("server.com"), ("local",)).verify_remote is False
 
 
+def test_settings_from_php_entry_uses_concurrent_uploads() -> None:
+    default_settings = settings_from_php_entry(_entry("server.com"), ("local",))
+    parallel_entry = dataclasses.replace(_entry("server.com"), concurrent_uploads=4)
+
+    assert default_settings.concurrent_operations == 1
+    assert settings_from_php_entry(parallel_entry, ("local",)).concurrent_operations == 4
+
+
 def test_parse_arguments_verify_remote(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--verify-remote"])
     assert parse_arguments().verify_remote is True

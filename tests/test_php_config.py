@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from php_config import parse_php_config
 
 
@@ -166,6 +168,56 @@ class TestParsePhpConfig:
         entries = parse_php_config(str(config))
         assert entries[0].transfer_type == "FTP"
         assert entries[0].ftp_port == 0
+        assert entries[0].concurrent_uploads == 1
+
+    def test_concurrent_uploads_parsed(self, tmp_path: Path) -> None:
+        config = tmp_path / "config_concurrent.php"
+        config.write_text("""<?php
+            return array(
+                array(
+                    'name' => 'Concurrent App',
+                    'ftp' => array(
+                        'server' => 'host',
+                        'concurrentUploads' => 4,
+                    )
+                )
+            );
+        ?>""")
+        entries = parse_php_config(str(config))
+        assert entries[0].concurrent_uploads == 4
+
+    @pytest.mark.parametrize("value", [0, -2, "abc"])
+    def test_invalid_concurrent_uploads_default_to_one(self, tmp_path: Path, value: int | str) -> None:
+        config = tmp_path / "config_invalid_concurrent.php"
+        config.write_text(f"""<?php
+            return array(
+                array(
+                    'name' => 'Concurrent App',
+                    'ftp' => array(
+                        'server' => 'host',
+                        'concurrentUploads' => {value if isinstance(value, int) else repr(value)},
+                    )
+                )
+            );
+        ?>""")
+        entries = parse_php_config(str(config))
+        assert entries[0].concurrent_uploads == 1
+
+    def test_concurrent_uploads_numeric_string_parsed(self, tmp_path: Path) -> None:
+        config = tmp_path / "config_concurrent_string.php"
+        config.write_text("""<?php
+            return array(
+                array(
+                    'name' => 'Concurrent App',
+                    'ftp' => array(
+                        'server' => 'host',
+                        'concurrentUploads' => '4',
+                    )
+                )
+            );
+        ?>""")
+        entries = parse_php_config(str(config))
+        assert entries[0].concurrent_uploads == 4
 
     def test_skips_entry_without_ftp(self, tmp_path: Path) -> None:
         config = tmp_path / "config_noftp.php"

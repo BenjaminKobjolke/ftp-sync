@@ -213,5 +213,6 @@ def settings_from_php_entry(
         ftp_port=entry.ftp_port,
         hash_cache_file=hash_cache_file,
         clear_remote_dirs=entry.clear_remote_dirs,
+        concurrent_operations=entry.concurrent_uploads,
         verify_remote=verify_remote,
     )
