@@ -21,6 +21,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **FTP and FTPS** — plain FTP and FTPS (FTP over TLS) connections
 - **Watcher mode** — `--watcher` watches local files for changes and auto-syncs to FTP (2s debounce)
 - **Compare mode** — `--compare <file>` writes a read-only report of remote files missing or different locally
+- **Upload file list** — `--list-files <output file>` writes the final upload map as JSON without connecting to FTP or opening the hash cache
 - **Source retention cleanup** — optionally delete source files older than N days after sync (e.g., download from FTP, then purge FTP files older than 30 days)
 - **Delete after download** — `--delete-source-after-download` / `DELETE_SOURCE_AFTER_DOWNLOAD` (download only) deletes each remote file once a local copy of the same size exists, then removes emptied remote folders. Local files no longer on the server stay in place (no `old` move), so the server works as an outbox
 - **Resync** — `--resync` flag clears the hash cache to force a full re-upload
@@ -37,7 +38,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 ## Usage
 
 ```
-uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--delete-source-after-download] [--no-delete] [--verify-remote]
+uv run python main.py <settings_file> [--local-dir <path>] [--ftp-dir <path>] [--hash-cache-file <path>] [--compare <output file>] [--list-files <output file>] [--resync] [--watcher] [--delete-source-after-days N] [--delete-source-after-download] [--no-delete] [--verify-remote]
 ```
 
 ### Examples
@@ -99,6 +100,15 @@ Compare the remote tree with the first `LOCAL_DIRECTORY` and write differences a
 ```
 uv run python main.py settings.ini --compare gaps.tsv
 ```
+
+List the files an upload would send, without connecting to FTP, opening the hash cache, or changing local files:
+```
+uv run python main.py settings.ini --local-dir ./site --list-files upload-list.json
+```
+
+The UTF-8 JSON contains the absolute upload roots and a map from relative forward-slash paths to absolute local paths:
+`{"roots": ["<absolute local root>"], "files": {"index.php": "<absolute local path>"}}`.
+The list mode applies the same `.deployignore`, PHP config, subfolder, `--local-dir`, and extra ignore rules as an upload.
 
 ### Compare mode
 

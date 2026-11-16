@@ -50,6 +50,7 @@ ftp-sync/
 ├── php_config.py     # PHP deploy config parser (deploy-tool format)
 ├── watcher.py        # File system watcher for auto-sync on changes
 ├── sync.py           # Sync orchestration, local file listing, old file handling
+├── upload_list.py    # Upload configs per INI/PHP entry and read-only --list-files output
 ├── hash_db.py        # Local file hash database for change detection
 ├── ftp_compare.py    # Read-only comparison of a remote FTP tree with a local directory
 ├── ftp_delete.py     # FTP file and directory deletion

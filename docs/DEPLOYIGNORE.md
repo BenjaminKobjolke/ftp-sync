@@ -102,6 +102,7 @@ CLAUDE.md
 - The `.deployignore` file itself is **always excluded** from sync — it never reaches the FTP
   server, even without a matching pattern.
 - If the file is missing (and before auto-creation runs), only that self-exclusion applies.
+- `--list-files OUTPUT_FILE` shows the effective result of all ignore sources for an upload. When a root has no `.deployignore`, the list uses the default patterns that a real upload would create first.
 
 ## Interaction with other settings
 
