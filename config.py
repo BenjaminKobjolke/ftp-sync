@@ -16,6 +16,7 @@ DIRECTION_UP = "up"
 DIRECTION_DOWN = "down"
 VALID_DIRECTIONS = (DIRECTION_UP, DIRECTION_DOWN)
 VALID_TRANSFER_TYPES = ("FTP", "FTPS")
+IGNORE_FILE_ENV_VAR = "FTP_SYNC_IGNORE_FILE"
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,11 @@ def parse_arguments() -> argparse.Namespace:
         metavar="OUTPUT_FILE",
         default=None,
         help="Read-only: list remote files missing or different locally into OUTPUT_FILE (no transfers, no deletes)",
+    )
+    parser.add_argument(
+        "--ignore-file",
+        default=os.environ.get(IGNORE_FILE_ENV_VAR) or None,
+        help="Extra .deployignore-style file applied to every root (default: $FTP_SYNC_IGNORE_FILE)",
     )
     parser.add_argument("--watcher", "-w", action="store_true", help="Watch for file changes and sync automatically")
     parser.add_argument(

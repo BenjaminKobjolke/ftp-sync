@@ -8,7 +8,10 @@ loading (``config.load_settings``), ``.deployignore`` filtering
 
 from pathlib import Path
 
-from config import load_settings
+import pytest
+
+from config import load_settings, parse_arguments
+from deployignore import ensure_deployignore, load_ignore_file
 from sync import build_merged_file_map
 
 
@@ -67,3 +70,26 @@ class TestLocalSyncPipeline:
         merged = build_merged_file_map((str(dir_a), str(dir_b)))
 
         assert merged["shared.txt"] == os.path.join(str(dir_b), "shared.txt")
+
+    def test_environment_ignore_file_filters_automation_paths(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        local_dir = tmp_path / "project"
+        (local_dir / "tickets" / "5").mkdir(parents=True)
+        (local_dir / "index.php").write_text("app")
+        (local_dir / "CODING_RULES.md").write_text("local rules")
+        (local_dir / "tickets" / "5" / "ticket.md").write_text("local ticket")
+        ensure_deployignore(str(local_dir))
+
+        ignore_file = tmp_path / "automation.ignore"
+        ignore_file.write_text("CODING_RULES*.md\ntickets/[0-9]*/\n")
+        monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", str(ignore_file))
+        monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
+        args = parse_arguments()
+        patterns = load_ignore_file(args.ignore_file)
+
+        merged = build_merged_file_map((str(local_dir),), extra_ignore_patterns=patterns)
+
+        assert "index.php" in merged
+        assert "CODING_RULES.md" not in merged
+        assert "tickets/5/ticket.md" not in merged

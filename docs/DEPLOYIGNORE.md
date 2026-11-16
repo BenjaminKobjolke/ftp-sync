@@ -79,6 +79,24 @@ tests/
 !important.log
 ```
 
+## Extra ignore file (`--ignore-file` / `FTP_SYNC_IGNORE_FILE`)
+
+Pass one additional file with `.deployignore` syntax to apply its patterns to every synced root,
+in addition to each root's own `.deployignore`. It applies to both uploads and downloads, and to
+INI and PHP deploy configurations. Blank lines and lines beginning with `#` are ignored.
+
+Set `FTP_SYNC_IGNORE_FILE` to the file path for automated runs, or pass `--ignore-file PATH` for
+a manual run. The command-line option takes precedence over the environment variable. A named
+file that does not exist or cannot be read stops the sync before it connects to FTP.
+
+An automation runner can use this file to keep its own work files out of deployments, without
+adding automation-specific patterns to each project's `.deployignore`:
+
+```
+tickets/[0-9]*/
+CLAUDE.md
+```
+
 ## Rules
 
 - The `.deployignore` file itself is **always excluded** from sync — it never reaches the FTP

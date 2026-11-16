@@ -41,6 +41,23 @@ code_analysis_rules.json
 """
 
 
+def load_ignore_file(path: str | None) -> tuple[str, ...]:
+    """Load non-empty gitignore-style patterns from an optional file."""
+    if not path:
+        return ()
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Ignore file not found: {path}")
+
+    with open(path, encoding="utf-8") as ignore_file:
+        patterns = tuple(
+            stripped
+            for line in ignore_file
+            if (stripped := line.strip()) and not stripped.startswith("#")
+        )
+    logger.info("Loaded %d patterns from ignore file %s", len(patterns), path)
+    return patterns
+
+
 def ensure_deployignore(directory: str) -> bool:
     """Create a default .deployignore in directory if missing.
 
@@ -69,11 +86,7 @@ def load_deployignore(directory: str, extra_patterns: tuple[str, ...] = ()) -> p
 
     if os.path.isfile(ignore_path):
         logger.info("Loading %s from %s", DEPLOYIGNORE_FILENAME, directory)
-        with open(ignore_path, encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#"):
-                    patterns.append(stripped)
+        patterns.extend(load_ignore_file(ignore_path))
         logger.debug("Loaded %d patterns (including auto-exclude)", len(patterns))
     else:
         logger.debug("No %s found in %s", DEPLOYIGNORE_FILENAME, directory)
@@ -90,13 +103,7 @@ def load_deployignore_patterns(directory: str) -> list[str]:
     if not os.path.isfile(ignore_path):
         return []
 
-    patterns: list[str] = []
-    with open(ignore_path, encoding="utf-8") as f:
-        for line in f:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                patterns.append(stripped)
-    return patterns
+    return list(load_ignore_file(ignore_path))
 
 
 def strip_subfolder_prefix(patterns: list[str], subfolder: str) -> list[str]:

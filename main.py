@@ -9,6 +9,7 @@ import sys
 from config import (
     DIRECTION_UP,
     Settings,
+    _parse_comma_list,
     apply_overrides,
     entry_hash_cache_file,
     load_settings,
@@ -20,6 +21,7 @@ from deployignore import (
     filter_ignored_paths,
     load_deployignore,
     load_deployignore_patterns,
+    load_ignore_file,
     strip_subfolder_prefix,
 )
 from ftp_compare import run_compare
@@ -89,9 +91,8 @@ def _run_php_config(args: object) -> None:
         logger.error("No deployment entries found in %s", args.settings_file)  # type: ignore[attr-defined]
         sys.exit(1)
 
-    from config import _parse_comma_list
-
     local_directories = _parse_comma_list(local_dir)
+    extra_ignore_patterns = load_ignore_file(getattr(args, "ignore_file", None))
     watcher_mode = getattr(args, "watcher", False)
 
     sync_configs: list[tuple[Settings, tuple[str, ...]]] = []
@@ -111,7 +112,7 @@ def _run_php_config(args: object) -> None:
             root_patterns = load_deployignore_patterns(local_directories[0])
             root_ignore_patterns = strip_subfolder_prefix(root_patterns, entry.subfolder)
 
-        extra_ignore = entry.ignore_patterns + tuple(root_ignore_patterns)
+        extra_ignore = entry.ignore_patterns + tuple(root_ignore_patterns) + extra_ignore_patterns
         hash_cache_file = entry_hash_cache_file(
             getattr(args, "hash_cache_file", None) or os.path.join(local_directories[0], ".ftp_sync_cache.db"),
             entry,
@@ -144,13 +145,14 @@ def _run_ini_config(args: object) -> None:
     if getattr(args, "compare", None):
         run_compare(settings, args.compare)  # type: ignore[attr-defined]
         return
-    _run_sync(settings, (), resync=getattr(args, "resync", False))
+    extra_ignore_patterns = load_ignore_file(getattr(args, "ignore_file", None))
+    _run_sync(settings, extra_ignore_patterns, resync=getattr(args, "resync", False))
 
     if getattr(args, "watcher", False):
         ignore = set(settings.ignore_dirs) | {"old", ".git"}
         watch_and_sync(
             settings.local_directories,
-            lambda: _run_sync(settings, (), resync=False),
+            lambda: _run_sync(settings, extra_ignore_patterns, resync=False),
             ignore,
         )
 

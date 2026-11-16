@@ -2,12 +2,36 @@
 
 from pathlib import Path
 
+import pytest
+
 from deployignore import (
     DEPLOYIGNORE_FILENAME,
     ensure_deployignore,
     filter_ignored_paths,
     load_deployignore,
+    load_ignore_file,
 )
+
+
+class TestLoadIgnoreFile:
+    """Tests for loading an additional ignore file."""
+
+    def test_none_and_empty_paths_return_no_patterns(self) -> None:
+        assert load_ignore_file(None) == ()
+        assert load_ignore_file("") == ()
+
+    def test_strips_comments_blanks_and_whitespace(self, tmp_path: Path) -> None:
+        ignore_file = tmp_path / "extra.ignore"
+        ignore_file.write_text("# comment\n\n tickets/[0-9]*/ \nCLAUDE.md\n")
+
+        assert load_ignore_file(str(ignore_file)) == ("tickets/[0-9]*/", "CLAUDE.md")
+
+    def test_missing_file_names_path(self, tmp_path: Path) -> None:
+        missing = str(tmp_path / "missing.ignore")
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            load_ignore_file(missing)
+        assert missing in str(exc_info.value)
 
 
 class TestLoadDeployignore:

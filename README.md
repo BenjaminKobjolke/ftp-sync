@@ -89,6 +89,12 @@ Use a custom hash cache file location (overrides `HASH_CACHE_FILE` from INI):
 uv run python main.py settings.ini --hash-cache-file "C:\caches\app-vendor.db"
 ```
 
+Apply an additional ignore file to every synced root and both sync directions:
+```
+uv run python main.py settings.ini --ignore-file "C:\automation\private.ignore"
+```
+See [Extra ignore file](docs/DEPLOYIGNORE.md#extra-ignore-file) for environment-variable use and details.
+
 Compare the remote tree with the first `LOCAL_DIRECTORY` and write differences as they are found:
 ```
 uv run python main.py settings.ini --compare gaps.tsv

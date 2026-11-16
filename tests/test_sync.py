@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from deployignore import load_ignore_file
 from sync import build_merged_file_map, get_local_files_recursive
 
 
@@ -54,6 +55,29 @@ class TestBuildMergedFileMap:
         d.mkdir()
         result = build_merged_file_map((str(d),))
         assert result == {}
+
+    def test_extra_ignore_file_filters_paths_from_all_roots(self, tmp_path: Path) -> None:
+        root_one = tmp_path / "root-one"
+        root_two = tmp_path / "root-two"
+        (root_one / "sub").mkdir(parents=True)
+        (root_one / "index.php").write_text("index")
+        (root_one / "sub" / "CLAUDE.md").write_text("local notes")
+        (root_one / "app" / "tickets").mkdir(parents=True)
+        (root_one / "app" / "tickets" / "list.php").write_text("ticket app")
+        (root_two / "tickets" / "123").mkdir(parents=True)
+        (root_two / "tickets" / "123" / "plan.md").write_text("plan")
+        ignore_file = tmp_path / "watcher.ignore"
+        ignore_file.write_text("tickets/[0-9]*/\nCLAUDE.md\n")
+
+        patterns = load_ignore_file(str(ignore_file))
+        merged = build_merged_file_map((str(root_one), str(root_two)), extra_ignore_patterns=patterns)
+
+        assert "tickets/123/plan.md" not in merged
+        assert "sub/CLAUDE.md" not in merged
+        assert {"index.php", "app/tickets/list.php"} <= set(merged)
+
+        without_extra_patterns = build_merged_file_map((str(root_one), str(root_two)))
+        assert {"tickets/123/plan.md", "sub/CLAUDE.md"} <= set(without_extra_patterns)
 
 
 class TestGetLocalFilesRecursive:

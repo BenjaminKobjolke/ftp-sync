@@ -434,3 +434,30 @@ def test_parse_arguments_delete_source_after_download(monkeypatch: pytest.Monkey
     settings = Settings(local_directories=("l",), ftp_directory="/", ftp_host="h", ftp_user="u", ftp_pass="p")
     assert apply_overrides(settings, parse_arguments()).delete_source_after_download is True
     assert settings.delete_source_after_download is False
+
+
+def test_parse_arguments_ignore_file_defaults_to_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    ignore_file = str(tmp_path / "extra.ignore")
+    monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", ignore_file)
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
+
+    assert parse_arguments().ignore_file == ignore_file
+
+
+def test_parse_arguments_ignore_file_flag_overrides_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", "from-env.ignore")
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--ignore-file", "from-flag.ignore"])
+
+    assert parse_arguments().ignore_file == "from-flag.ignore"
+
+
+@pytest.mark.parametrize("environment_value", [None, ""])
+def test_parse_arguments_ignore_file_defaults_to_none_when_unset_or_empty(
+    monkeypatch: pytest.MonkeyPatch, environment_value: str | None
+) -> None:
+    monkeypatch.delenv("FTP_SYNC_IGNORE_FILE", raising=False)
+    if environment_value is not None:
+        monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", environment_value)
+    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
+
+    assert parse_arguments().ignore_file is None
