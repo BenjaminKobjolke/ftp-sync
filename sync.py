@@ -52,6 +52,7 @@ def build_merged_file_map(
     local_directories: tuple[str, ...],
     ignore_dirs: tuple[str, ...] = (),
     extra_ignore_patterns: tuple[str, ...] = (),
+    assume_default_deployignore: bool = False,
 ) -> MergedFileMap:
     """Build a merged map of relative_path -> absolute_local_path from multiple directories.
 
@@ -62,7 +63,9 @@ def build_merged_file_map(
     mtimes: dict[str, float] = {}
 
     for local_dir in local_directories:
-        deploy_spec = load_deployignore(local_dir, extra_ignore_patterns)
+        deploy_spec = load_deployignore(
+            local_dir, extra_ignore_patterns, assume_default=assume_default_deployignore
+        )
         for rel_path in get_local_files_recursive(local_dir, ignore_dirs=ignore_dirs, deploy_spec=deploy_spec):
             abs_path = os.path.join(local_dir, rel_path)
             mtime = os.path.getmtime(abs_path)

@@ -133,6 +133,15 @@ def parse_arguments() -> argparse.Namespace:
         help="Read-only: list remote files missing or different locally into OUTPUT_FILE (no transfers, no deletes)",
     )
     parser.add_argument(
+        "--list-files",
+        metavar="OUTPUT_FILE",
+        default=None,
+        help=(
+            "Read-only: write the files an upload would send as JSON to OUTPUT_FILE "
+            "(no connection, no cache, no deletes)"
+        ),
+    )
+    parser.add_argument(
         "--ignore-file",
         default=os.environ.get(IGNORE_FILE_ENV_VAR) or None,
         help="Extra .deployignore-style file applied to every root (default: $FTP_SYNC_IGNORE_FILE)",

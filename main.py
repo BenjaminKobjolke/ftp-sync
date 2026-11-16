@@ -9,20 +9,15 @@ import sys
 from config import (
     DIRECTION_UP,
     Settings,
-    _parse_comma_list,
     apply_overrides,
-    entry_hash_cache_file,
     load_settings,
     parse_arguments,
-    settings_from_php_entry,
 )
 from deployignore import (
     ensure_deployignore,
     filter_ignored_paths,
     load_deployignore,
-    load_deployignore_patterns,
     load_ignore_file,
-    strip_subfolder_prefix,
 )
 from ftp_compare import run_compare
 from ftp_delete import (
@@ -41,15 +36,12 @@ from ftp_ops import (
     upload_file,
 )
 from hash_db import delete_paths, filter_changed_files, find_deleted_paths, open_hash_db, upsert_hashes
-from php_config import parse_php_config
 from remote_verify import uploaded_facts, with_remote_drift
 from sync import build_merged_file_map, get_local_files_recursive, handle_old_files, sync_files
+from upload_list import php_upload_configs, run_list_files
 from watcher import watch_and_sync
 
 logger = logging.getLogger(__name__)
-
-UNSUPPORTED_TRANSFER_TYPES = ("SFTP",)
-
 
 def setup_logging() -> None:
     """Configure root logger."""
@@ -66,6 +58,9 @@ def main() -> None:
     args = parse_arguments()
 
     try:
+        if getattr(args, "list_files", None):
+            run_list_files(args)
+            return
         if getattr(args, "compare", None) and args.settings_file.endswith(".php"):
             logger.error("--compare is only supported with INI settings files")
             sys.exit(1)
@@ -81,60 +76,24 @@ def main() -> None:
 
 def _run_php_config(args: object) -> None:
     """Process a PHP deploy config file with all its entries."""
-    local_dir = getattr(args, "local_dir", None)
-    if not local_dir:
-        logger.error("--local-dir is required when using a PHP config file")
-        sys.exit(1)
-
-    entries = parse_php_config(args.settings_file)  # type: ignore[attr-defined]
-    if not entries:
-        logger.error("No deployment entries found in %s", args.settings_file)  # type: ignore[attr-defined]
-        sys.exit(1)
-
-    local_directories = _parse_comma_list(local_dir)
-    extra_ignore_patterns = load_ignore_file(getattr(args, "ignore_file", None))
+    upload_configs = php_upload_configs(args)
     watcher_mode = getattr(args, "watcher", False)
-
-    sync_configs: list[tuple[Settings, tuple[str, ...]]] = []
-
-    for entry in entries:
-        logger.info("=== Processing: %s ===", entry.name)
-
-        if entry.transfer_type in UNSUPPORTED_TRANSFER_TYPES:
-            logger.error("Transfer type '%s' is not supported, skipping entry", entry.transfer_type)
-            continue
-
-        entry_local_dirs = local_directories
-        root_ignore_patterns: list[str] = []
-        if entry.subfolder:
-            entry_local_dirs = tuple(os.path.join(d, entry.subfolder) for d in local_directories)
-            logger.info("Using subfolder: %s", entry.subfolder)
-            root_patterns = load_deployignore_patterns(local_directories[0])
-            root_ignore_patterns = strip_subfolder_prefix(root_patterns, entry.subfolder)
-
-        extra_ignore = entry.ignore_patterns + tuple(root_ignore_patterns) + extra_ignore_patterns
-        hash_cache_file = entry_hash_cache_file(
-            getattr(args, "hash_cache_file", None) or os.path.join(local_directories[0], ".ftp_sync_cache.db"),
-            entry,
-            len(entries),
+    for upload_config in upload_configs:
+        _run_sync(
+            upload_config.settings,
+            upload_config.extra_ignore_patterns,
+            resync=getattr(args, "resync", False),
         )
 
-        settings = settings_from_php_entry(
-            entry, entry_local_dirs, hash_cache_file, verify_remote=getattr(args, "verify_remote", False)
-        )
-
-        _run_sync(settings, extra_ignore, resync=getattr(args, "resync", False))
-        sync_configs.append((settings, extra_ignore))
-
-    if watcher_mode and sync_configs:
+    if watcher_mode and upload_configs:
 
         def sync_all() -> None:
-            for s, e in sync_configs:
-                _run_sync(s, e, resync=False)
+            for upload_config in upload_configs:
+                _run_sync(upload_config.settings, upload_config.extra_ignore_patterns, resync=False)
 
         watch_dirs: set[str] = set()
-        for s, _ in sync_configs:
-            watch_dirs.update(s.local_directories)
+        for upload_config in upload_configs:
+            watch_dirs.update(upload_config.settings.local_directories)
         watch_and_sync(tuple(watch_dirs), sync_all, {"old", ".git"})
 
 

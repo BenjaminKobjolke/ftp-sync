@@ -10,6 +10,7 @@ import pytest
 
 import main
 import remote_verify
+import upload_list
 from config import Settings
 from hash_db import RemoteFact, compute_file_hash, get_stored_rows, open_hash_db, upsert_hashes
 from php_config import PhpDeployEntry
@@ -125,7 +126,7 @@ class TestExtraIgnoreFile:
             ignore_patterns=("vendor/cache/",),
             subfolder="themes/demo",
         )
-        monkeypatch.setattr(main, "parse_php_config", lambda path: [entry])
+        monkeypatch.setattr(upload_list, "parse_php_config", lambda path: [entry])
         calls: list[tuple[str, ...]] = []
         monkeypatch.setattr(main, "_run_sync", lambda settings, patterns, resync: calls.append(patterns))
 

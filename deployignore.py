@@ -1,5 +1,6 @@
 """Load and apply .deployignore patterns for file filtering."""
 
+from collections.abc import Iterable
 import logging
 import os
 
@@ -41,6 +42,13 @@ code_analysis_rules.json
 """
 
 
+def _clean_ignore_patterns(lines: Iterable[str]) -> tuple[str, ...]:
+    """Strip blank and comment lines from gitignore-style pattern text."""
+    return tuple(
+        stripped for line in lines if (stripped := line.strip()) and not stripped.startswith("#")
+    )
+
+
 def load_ignore_file(path: str | None) -> tuple[str, ...]:
     """Load non-empty gitignore-style patterns from an optional file."""
     if not path:
@@ -49,11 +57,7 @@ def load_ignore_file(path: str | None) -> tuple[str, ...]:
         raise FileNotFoundError(f"Ignore file not found: {path}")
 
     with open(path, encoding="utf-8") as ignore_file:
-        patterns = tuple(
-            stripped
-            for line in ignore_file
-            if (stripped := line.strip()) and not stripped.startswith("#")
-        )
+        patterns = _clean_ignore_patterns(ignore_file)
     logger.info("Loaded %d patterns from ignore file %s", len(patterns), path)
     return patterns
 
@@ -73,7 +77,12 @@ def ensure_deployignore(directory: str) -> bool:
     return True
 
 
-def load_deployignore(directory: str, extra_patterns: tuple[str, ...] = ()) -> pathspec.PathSpec:
+def load_deployignore(
+    directory: str,
+    extra_patterns: tuple[str, ...] = (),
+    *,
+    assume_default: bool = False,
+) -> pathspec.PathSpec:
     """Load .deployignore patterns from a directory root.
 
     Returns a PathSpec matcher using gitignore syntax.
@@ -90,6 +99,8 @@ def load_deployignore(directory: str, extra_patterns: tuple[str, ...] = ()) -> p
         logger.debug("Loaded %d patterns (including auto-exclude)", len(patterns))
     else:
         logger.debug("No %s found in %s", DEPLOYIGNORE_FILENAME, directory)
+        if assume_default:
+            patterns.extend(_clean_ignore_patterns(DEFAULT_DEPLOYIGNORE_CONTENT.splitlines()))
 
     return pathspec.PathSpec.from_lines("gitignore", patterns)
 

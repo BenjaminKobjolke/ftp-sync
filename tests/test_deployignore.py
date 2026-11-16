@@ -68,6 +68,19 @@ class TestLoadDeployignore:
         assert spec.match_file(DEPLOYIGNORE_FILENAME)
         assert not spec.match_file("src/main.py")
 
+    def test_can_assume_default_patterns_without_creating_file(self, tmp_path: Path) -> None:
+        spec = load_deployignore(str(tmp_path), assume_default=True)
+        assert spec.match_file("CLAUDE.md")
+        assert spec.match_file(".git/config")
+        assert not spec.match_file("src/main.py")
+        assert not (tmp_path / DEPLOYIGNORE_FILENAME).exists()
+
+    def test_existing_file_takes_precedence_over_assumed_default(self, tmp_path: Path) -> None:
+        (tmp_path / DEPLOYIGNORE_FILENAME).write_text("custom/\n", encoding="utf-8")
+        spec = load_deployignore(str(tmp_path), assume_default=True)
+        assert spec.match_file("custom/file.txt")
+        assert not spec.match_file("CLAUDE.md")
+
 
 class TestEnsureDeployignore:
     """Tests for ensure_deployignore."""
