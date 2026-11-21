@@ -1,6 +1,5 @@
 """Tests for the sync entry point."""
 
-import argparse
 import dataclasses
 import ftplib
 import logging
@@ -14,36 +13,11 @@ import remote_verify
 import upload_list
 from config import Settings
 from hash_db import RemoteFact, compute_file_hash, get_stored_rows, open_hash_db, upsert_hashes
-from php_config import PhpDeployEntry
 from run_failures import run_failures
-
-
-def _settings(tmp_path: Path, hash_cache_file: str) -> Settings:
-    return Settings(
-        local_directories=(str(tmp_path),),
-        ftp_directory="/",
-        ftp_host="host",
-        ftp_user="user",
-        ftp_pass="pass",
-        direction="up",
-        hash_cache_file=hash_cache_file,
-    )
+from tests.main_test_helpers import make_settings, write_ini
 
 
 class TestOperationFailureExitCode:
-    def _write_ini(self, path: Path, local: Path) -> Path:
-        ini = path / "settings.ini"
-        ini.write_text(
-            "[FTP]\n"
-            f"LOCAL_DIRECTORY = {local}\n"
-            "FTP_DIRECTORY = /remote\n"
-            "FTP_HOST = host\n"
-            "FTP_USER = user\n"
-            "FTP_PASS = pass\n"
-            "DIRECTION = up\n"
-        )
-        return ini
-
     def _run_ini(
         self,
         tmp_path: Path,
@@ -57,7 +31,7 @@ class TestOperationFailureExitCode:
         (local / "bad.txt").write_text("failed contents")
         (local / "good.txt").write_text("successful contents")
         cache = tmp_path / "cache.db"
-        ini = self._write_ini(tmp_path, local)
+        ini = write_ini(tmp_path, local)
         monkeypatch.setattr(
             "sys.argv",
             ["main.py", str(ini), "--local-dir", str(local), "--hash-cache-file", str(cache)],
@@ -103,7 +77,7 @@ class TestOperationFailureExitCode:
         assert "Finished: 0 operations failed" in str(result["logs"])
 
     def test_php_entries_share_failure_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        settings = _settings(Path("."), "")
+        settings = make_settings(Path("."), "")
         configs = [
             upload_list.UploadConfig(settings, ()),
             upload_list.UploadConfig(settings, ()),
@@ -137,135 +111,10 @@ class TestRunSyncHashCacheFolder:
         missing_dir = tmp_path / "missing"
 
         with pytest.raises(SystemExit) as exc_info:
-            main._run_sync(_settings(tmp_path, str(missing_dir / "cache.db")), (), resync=False)
+            main._run_sync(make_settings(tmp_path, str(missing_dir / "cache.db")), (), resync=False)
 
         assert exc_info.value.code == 1
         assert str(missing_dir) in caplog.text
-
-
-class TestExtraIgnoreFile:
-    def _write_ini(self, path: Path, local: Path) -> Path:
-        ini = path / "settings.ini"
-        ini.write_text(
-            "[FTP]\n"
-            f"LOCAL_DIRECTORY = {local}\n"
-            "FTP_DIRECTORY = /remote\n"
-            "FTP_HOST = host\n"
-            "FTP_USER = user\n"
-            "FTP_PASS = pass\n"
-            "DIRECTION = up\n"
-        )
-        return ini
-
-    def test_ini_passes_extra_patterns_to_sync(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        local = tmp_path / "local"
-        local.mkdir()
-        ini = self._write_ini(tmp_path, local)
-        ignore_file = tmp_path / "extra.ignore"
-        ignore_file.write_text("tickets/[0-9]*/\n")
-        calls: list[tuple[str, ...]] = []
-        monkeypatch.setattr(main, "_run_sync", lambda settings, patterns, resync: calls.append(patterns))
-        args = argparse.Namespace(
-            settings_file=str(ini),
-            ignore_file=str(ignore_file),
-            local_dir=None,
-            ftp_dir=None,
-            delete_source_after_days=None,
-            hash_cache_file=None,
-            no_delete=False,
-        )
-
-        main._run_ini_config(args)
-
-        assert calls == [("tickets/[0-9]*/",)]
-
-    def test_missing_ini_ignore_file_stops_before_sync_or_connect(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        local = tmp_path / "local"
-        local.mkdir()
-        ini = self._write_ini(tmp_path, local)
-        missing = str(tmp_path / "missing.ignore")
-        sync = MagicMock()
-        connect = MagicMock()
-        monkeypatch.setattr(main, "_run_sync", sync)
-        monkeypatch.setattr(main, "connect_ftp", connect)
-        args = argparse.Namespace(
-            settings_file=str(ini),
-            ignore_file=missing,
-            local_dir=None,
-            ftp_dir=None,
-            delete_source_after_days=None,
-            hash_cache_file=None,
-            no_delete=False,
-        )
-
-        with pytest.raises(FileNotFoundError) as exc_info:
-            main._run_ini_config(args)
-        assert missing in str(exc_info.value)
-
-        sync.assert_not_called()
-        connect.assert_not_called()
-
-    def test_php_combines_entry_root_and_extra_ignore_patterns(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        local = tmp_path / "local"
-        local.mkdir()
-        (local / ".deployignore").write_text("themes/demo/cache/\nother/path\n")
-        ignore_file = tmp_path / "extra.ignore"
-        ignore_file.write_text("tickets/[0-9]*/\n")
-        entry = PhpDeployEntry(
-            name="site",
-            ftp_host="host",
-            ftp_user="user",
-            ftp_pass="pass",
-            ftp_directory="/remote",
-            ignore_patterns=("vendor/cache/",),
-            subfolder="themes/demo",
-        )
-        monkeypatch.setattr(upload_list, "parse_php_config", lambda path: [entry])
-        calls: list[tuple[str, ...]] = []
-        monkeypatch.setattr(main, "_run_sync", lambda settings, patterns, resync: calls.append(patterns))
-
-        main._run_php_config(
-            type(
-                "Args",
-                (),
-                {"settings_file": "deploy.php", "local_dir": str(local), "ignore_file": str(ignore_file)},
-            )()
-        )
-
-        assert calls == [("vendor/cache/", "cache/", "other/path", "tickets/[0-9]*/")]
-
-    def test_no_delete_upload_selection_skips_extra_ignored_files(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        local = tmp_path / "local"
-        private = local / "tickets" / "7" / "plan.md"
-        private.parent.mkdir(parents=True)
-        private.write_text("local plan")
-        (local / "index.php").write_text("home")
-        ignore_file = tmp_path / "extra.ignore"
-        ignore_file.write_text("tickets/[0-9]*/\n")
-        settings = dataclasses.replace(_settings(local, ""), no_delete=True)
-        ftp = MagicMock(spec=ftplib.FTP)
-        uploads: list[str] = []
-
-        def record_upload(settings: Settings, args_list: list[tuple[object, ...]]) -> list[str]:
-            uploads.extend(args[0] for args in args_list)  # type: ignore[arg-type]
-            return []
-
-        monkeypatch.setattr(main, "connect_ftp", lambda value: ftp)
-        monkeypatch.setattr(main, "get_ftp_files_recursive", lambda value, ignore_dirs: [])
-        monkeypatch.setattr(main, "sync_files", lambda value, operation, args: record_upload(value, args))
-        delete_files = MagicMock()
-        monkeypatch.setattr(main, "delete_ftp_files", delete_files)
-
-        main._run_sync(settings, main.load_ignore_file(str(ignore_file)), resync=False)
-
-        assert uploads == ["index.php"]
-        delete_files.assert_not_called()
 
 
 class TestUploadWithHashCacheVerifyRemote:
@@ -279,7 +128,7 @@ class TestUploadWithHashCacheVerifyRemote:
             "same.php": str(local / "same.php"),
         }
         settings = dataclasses.replace(
-            _settings(local, str(tmp_path / "cache.db")), ftp_directory="/vendor", verify_remote=verify_remote
+            make_settings(local, str(tmp_path / "cache.db")), ftp_directory="/vendor", verify_remote=verify_remote
         )
         session = open_hash_db(settings.hash_cache_file)
         facts = {
@@ -345,7 +194,7 @@ class TestRunSyncDeleteSourceAfterDownload:
         monkeypatch.setattr(main, "handle_old_files", lambda *a: calls.append("old"))
         monkeypatch.setattr(main, "delete_downloaded_ftp_files", lambda ftp, s, files: calls.append("delete") or 1)
         settings = dataclasses.replace(
-            _settings(tmp_path, ""), direction="down", delete_source_after_download=flag
+            make_settings(tmp_path, ""), direction="down", delete_source_after_download=flag
         )
         main._run_sync(settings, (), resync=False)
         return calls
