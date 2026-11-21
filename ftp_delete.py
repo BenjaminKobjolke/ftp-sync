@@ -7,6 +7,7 @@ import os
 
 from config import Settings
 from ftp_ops import build_ftp_path, get_ftp_connection
+from run_failures import OP_DELETE, run_failures
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ def delete_ftp_file(ftp: ftplib.FTP, settings: Settings, relative_path: str) -> 
         return True
     except ftplib.error_perm:
         logger.warning("Could not delete FTP file: %s", relative_path)
+        run_failures.record(OP_DELETE, relative_path)
         return False
 
 

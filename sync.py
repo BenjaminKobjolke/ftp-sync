@@ -12,6 +12,7 @@ import pathspec
 from config import Settings
 from deployignore import load_deployignore
 from ftp_ops import ensure_local_dir
+from run_failures import OP_TRANSFER, run_failures
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,7 @@ def sync_files(
                     completed_files.append(result)
             except Exception:
                 logger.exception("Operation failed for %s", file)
+                run_failures.record(OP_TRANSFER, str(file))
 
     return completed_files
 

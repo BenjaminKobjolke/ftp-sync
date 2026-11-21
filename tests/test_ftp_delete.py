@@ -5,7 +5,8 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from config import Settings
-from ftp_delete import clear_remote_dirs, delete_downloaded_ftp_files
+from ftp_delete import clear_remote_dirs, delete_downloaded_ftp_files, delete_ftp_file
+from run_failures import run_failures
 
 
 def _settings() -> Settings:
@@ -18,6 +19,21 @@ def _settings() -> Settings:
         direction="up",
         clear_remote_dirs=("cache/css",),
     )
+
+
+def test_delete_ftp_file_records_permission_failure() -> None:
+    ftp = MagicMock(spec=ftplib.FTP)
+    ftp.delete.side_effect = ftplib.error_perm("550 denied")
+
+    assert delete_ftp_file(ftp, _settings(), "bad.txt") is False
+    assert run_failures.count == 1
+
+
+def test_delete_ftp_file_does_not_record_success() -> None:
+    ftp = MagicMock(spec=ftplib.FTP)
+
+    assert delete_ftp_file(ftp, _settings(), "good.txt") is True
+    assert run_failures.count == 0
 
 
 def _mock_ftp(listings: dict[str, list[str]]) -> MagicMock:

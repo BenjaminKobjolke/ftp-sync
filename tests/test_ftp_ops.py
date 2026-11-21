@@ -2,10 +2,14 @@
 
 import ftplib
 import ssl
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+import ftp_ops
 from config import Settings
-from ftp_ops import _make_ftps_context, _ReusedTLSSession, connect_ftp
+from ftp_ops import _make_ftps_context, _ReusedTLSSession, connect_ftp, upload_file
 
 
 def _make_settings(*, transfer_type: str = "FTP", ftp_port: int = 0) -> Settings:
@@ -18,6 +22,24 @@ def _make_settings(*, transfer_type: str = "FTP", ftp_port: int = 0) -> Settings
         transfer_type=transfer_type,
         ftp_port=ftp_port,
     )
+
+
+def test_upload_file_propagates_transfer_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    local_file = tmp_path / "bad.txt"
+    local_file.write_text("contents")
+    settings = Settings(
+        local_directories=(str(tmp_path),),
+        ftp_directory="/remote",
+        ftp_host="host",
+        ftp_user="user",
+        ftp_pass="pass",
+    )
+    ftp = MagicMock(spec=ftplib.FTP)
+    ftp.storbinary.side_effect = ftplib.error_temp("temporary failure")
+    monkeypatch.setattr(ftp_ops, "get_ftp_connection", lambda value: ftp)
+
+    with pytest.raises(ftplib.error_temp):
+        upload_file(("bad.txt", str(local_file), settings, None))
 
 
 class TestReusedTLSSession:

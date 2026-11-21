@@ -53,6 +53,11 @@ Override directories via CLI:
 uv run python main.py settings.ini --local-dir "C:\my\local\folder" --ftp-dir "/remote/path"
 ```
 
+### Exit codes
+
+- `0` — all file operations succeeded.
+- `1` — configuration or connection failed, or at least one upload, download, or delete failed. The run still processes its remaining files; failed uploads are retried on the next run.
+
 Watch for changes and auto-sync:
 ```
 uv run python main.py settings.ini --watcher

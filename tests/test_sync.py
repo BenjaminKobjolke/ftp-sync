@@ -3,8 +3,45 @@
 import os
 from pathlib import Path
 
+from config import Settings
 from deployignore import load_ignore_file
-from sync import build_merged_file_map, get_local_files_recursive
+from run_failures import run_failures
+from sync import build_merged_file_map, get_local_files_recursive, sync_files
+
+
+def test_sync_files_records_failed_operation(tmp_path: Path) -> None:
+    settings = Settings(
+        local_directories=(str(tmp_path),),
+        ftp_directory="/remote",
+        ftp_host="host",
+        ftp_user="user",
+        ftp_pass="pass",
+    )
+
+    def operate(args: tuple[str, ...]) -> str:
+        if args[0] == "bad.txt":
+            raise OSError("upload failed")
+        return args[0]
+
+    completed = sync_files(settings, operate, [("bad.txt",), ("good.txt",)])
+
+    assert completed == ["good.txt"]
+    assert run_failures.count == 1
+
+
+def test_sync_files_does_not_record_successful_operations(tmp_path: Path) -> None:
+    settings = Settings(
+        local_directories=(str(tmp_path),),
+        ftp_directory="/remote",
+        ftp_host="host",
+        ftp_user="user",
+        ftp_pass="pass",
+    )
+
+    completed = sync_files(settings, lambda args: args[0], [("good.txt",)])
+
+    assert completed == ["good.txt"]
+    assert run_failures.count == 0
 
 
 class TestBuildMergedFileMap:

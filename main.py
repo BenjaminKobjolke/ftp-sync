@@ -37,6 +37,7 @@ from ftp_ops import (
 )
 from hash_db import delete_paths, filter_changed_files, find_deleted_paths, open_hash_db, upsert_hashes
 from remote_verify import uploaded_facts, with_remote_drift
+from run_failures import run_failures
 from sync import build_merged_file_map, get_local_files_recursive, handle_old_files, sync_files
 from upload_list import php_upload_configs, run_list_files
 from watcher import watch_and_sync
@@ -72,6 +73,12 @@ def main() -> None:
         logger.error("FTP connection error: %s", e)
         logger.error("Check FTP_HOST / FTP_PORT, credentials, and TRANSFER_TYPE (FTP vs FTPS) in your INI file.")
         sys.exit(1)
+
+    failure_count = run_failures.count
+    if failure_count:
+        logger.error("Finished: %d operations failed", failure_count)
+        sys.exit(1)
+    logger.info("Finished: 0 operations failed")
 
 
 def _run_php_config(args: object) -> None:
