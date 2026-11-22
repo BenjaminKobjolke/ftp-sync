@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass, replace
 
-from php_config import PhpDeployEntry
+from php_config import DEFAULT_VERSION_FILE, PhpDeployEntry
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ class Settings:
     no_delete: bool = False
     clear_remote_dirs: tuple[str, ...] = ()
     verify_remote: bool = False
+    version_file: str = DEFAULT_VERSION_FILE
 
 
 def _parse_comma_list(raw: str) -> tuple[str, ...]:
@@ -114,6 +115,7 @@ def load_settings(ini_file: str) -> Settings:
         no_delete=ftp_section.getboolean("NO_DELETE", False),
         clear_remote_dirs=_parse_comma_list(ftp_section.get("CLEAR_REMOTE_DIRS", "")),
         verify_remote=ftp_section.getboolean("VERIFY_REMOTE", False),
+        version_file=ftp_section.get("VERSION_FILE", DEFAULT_VERSION_FILE),
     )
 
 
@@ -230,4 +232,5 @@ def settings_from_php_entry(
         clear_remote_dirs=entry.clear_remote_dirs,
         concurrent_operations=entry.concurrent_uploads,
         verify_remote=verify_remote,
+        version_file=entry.version_file,
     )

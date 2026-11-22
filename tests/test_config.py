@@ -73,6 +73,7 @@ class TestSettings:
         assert settings.direction == "down"
         assert settings.concurrent_operations == 1
         assert settings.no_delete is False
+        assert settings.version_file == "deploy.ver"
 
 
 class TestLoadSettings:
@@ -156,6 +157,30 @@ class TestLoadSettings:
         ini_file = tmp_path / "settings.ini"
         ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
         assert load_settings(str(ini_file)).verify_remote is False
+
+    def test_version_file_defaults_when_missing(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        assert load_settings(str(ini_file)).version_file == "deploy.ver"
+
+    def test_empty_version_file_disables_setting(self, tmp_path: Path) -> None:
+        ini_file = tmp_path / "settings.ini"
+        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nVERSION_FILE =\n")
+        assert load_settings(str(ini_file)).version_file == ""
+
+
+class TestSettingsFromPhpEntry:
+    def test_maps_version_file_from_php_entry(self) -> None:
+        entry = dataclasses.replace(_entry("host"), version_file="custom.ver")
+
+        settings = settings_from_php_entry(entry, ("local",))
+
+        assert settings.version_file == "custom.ver"
+
+    def test_defaults_version_file_for_php_entry(self) -> None:
+        settings = settings_from_php_entry(_entry("host"), ("local",))
+
+        assert settings.version_file == "deploy.ver"
 
     def test_delete_source_after_download_parsed(self, tmp_path: Path) -> None:
         ini_file = tmp_path / "settings.ini"

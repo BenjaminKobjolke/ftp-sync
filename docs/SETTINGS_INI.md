@@ -28,6 +28,7 @@ in `load_settings()` (`config.py`).
 | `DELETE_SOURCE_AFTER_DOWNLOAD` | `false` | When `DIRECTION = down`, deletes each remote file whose local copy exists with the same size (downloaded this run or already present), then removes emptied remote folders. Failed or partial downloads stay on the server. Local files missing on the server stay in place instead of moving to `old`. Ignored (with a warning) for `DIRECTION = up`. Can be forced on with `--delete-source-after-download`. |
 | `NO_DELETE` | `false` | Upload direction only: never delete remote files that are absent locally (keeps stray remote files). Can be forced on with `--no-delete`. |
 | `CLEAR_REMOTE_DIRS` | *(none)* | Upload direction only: comma-separated remote dirs (relative to `FTP_DIRECTORY`) emptied after each upload, e.g. `CLEAR_REMOTE_DIRS = cache/css, cache/smarty/templates_c`. Deletes all files and empty subdirs inside; the listed dirs themselves are kept. Runs even with `NO_DELETE`. PHP config equivalent: `ftp.clearAfterUpload` array. See [CLEAR_REMOTE_DIRS.md](CLEAR_REMOTE_DIRS.md). |
+| `VERSION_FILE` | `deploy.ver` | Upload direction only: after a successful upload from a Git checkout, writes the first local folder's full `HEAD` commit hash to this file in the FTP root. Set empty to disable. PHP deploy configs use the top-level `version_file` key with the same default. |
 
 ## CLI overrides
 

@@ -206,3 +206,86 @@ class TestRunSyncDeleteSourceAfterDownload:
 
     def test_without_flag_old_files_are_moved(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         assert self._run(tmp_path, monkeypatch, flag=False) == ["old"]
+
+
+class TestVersionFileSync:
+    def _run_upload(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        fail_upload: bool = False,
+        version_file: str = "deploy.ver",
+    ) -> list[str]:
+        local = tmp_path / "local"
+        local.mkdir()
+        settings = dataclasses.replace(
+            make_settings(local, ""), ftp_directory="/remote", version_file=version_file, no_delete=True
+        )
+        uploaded: list[str] = []
+        ftp = MagicMock(spec=ftplib.FTP)
+        monkeypatch.setattr(main, "connect_ftp", lambda current: ftp)
+        monkeypatch.setattr(main, "build_merged_file_map", lambda *args: {"file.txt": str(local / "file.txt")})
+        monkeypatch.setattr(main, "get_ftp_files_recursive", lambda *args, **kwargs: [])
+
+        def sync_files(*args: object) -> list[str]:
+            if fail_upload:
+                run_failures.record("transfer", "file.txt")
+                return []
+            return ["file.txt"]
+
+        monkeypatch.setattr(main, "sync_files", sync_files)
+        monkeypatch.setattr(main, "local_git_commit", lambda local_dir: "a" * 40)
+        monkeypatch.setattr(
+            main,
+            "upload_version_file",
+            lambda current_ftp, current_settings, commit: uploaded.append(commit),
+        )
+        run_failures.reset()
+        main._run_sync(settings, (), resync=False)
+        run_failures.reset()
+        return uploaded
+
+    def test_successful_upload_writes_version_file_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert self._run_upload(tmp_path, monkeypatch) == ["a" * 40]
+
+    def test_failed_upload_does_not_write_version_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._run_upload(tmp_path, monkeypatch, fail_upload=True) == []
+
+    def test_empty_version_file_disables_version_upload(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._run_upload(tmp_path, monkeypatch, version_file="") == []
+
+    def test_download_direction_does_not_write_version_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        local = tmp_path / "local"
+        local.mkdir()
+        settings = dataclasses.replace(make_settings(local, ""), direction="down")
+        ftp = MagicMock(spec=ftplib.FTP)
+        monkeypatch.setattr(main, "connect_ftp", lambda current: ftp)
+        monkeypatch.setattr(main, "get_ftp_files_recursive", lambda *args, **kwargs: [])
+        monkeypatch.setattr(main, "get_local_files_recursive", lambda *args, **kwargs: {})
+        monkeypatch.setattr(main, "sync_files", lambda *args: [])
+        monkeypatch.setattr(main, "local_git_commit", MagicMock(side_effect=AssertionError("must not run")))
+        upload_version = MagicMock(side_effect=AssertionError("must not upload"))
+        monkeypatch.setattr(main, "upload_version_file", upload_version)
+
+        main._run_sync(settings, (), resync=False)
+
+        upload_version.assert_not_called()
+
+    def test_ftp_scan_preserves_remote_version_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        settings = dataclasses.replace(make_settings(tmp_path, ""), no_delete=False)
+        remote_files = ["deploy.ver", "obsolete.txt"]
+        monkeypatch.setattr(main, "get_ftp_files_recursive", lambda *args, **kwargs: remote_files)
+        monkeypatch.setattr(main, "sync_files", lambda *args: [])
+        delete = MagicMock()
+        monkeypatch.setattr(main, "delete_ftp_files", delete)
+
+        main._upload_with_ftp_scan(settings, {}, MagicMock(spec=ftplib.FTP))
+
+        assert delete.call_args.args[2] == {"deploy.ver"}

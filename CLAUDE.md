@@ -55,6 +55,7 @@ ftp-sync/
 ├── ftp_compare.py    # Read-only comparison of a remote FTP tree with a local directory
 ├── ftp_delete.py     # FTP file and directory deletion
 ├── ftp_mtime.py      # FTP modification-time retrieval and age-based source cleanup
+├── git_version.py    # local Git revision lookup and FTP version-file upload
 ├── run_failures.py   # Process-wide count of failed file operations
 ├── tests/
 │   └── test_config.py

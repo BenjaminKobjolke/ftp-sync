@@ -371,3 +371,44 @@ class TestParsePhpConfig:
         ?>""")
         entries = parse_php_config(str(config))
         assert entries[0].subfolder == ""
+
+    def test_version_file_is_parsed_from_entry(self, tmp_path: Path) -> None:
+        config = tmp_path / "config_version.php"
+        config.write_text("""<?php
+            return array(
+                array(
+                    'name' => 'Versioned App',
+                    'version_file' => 'custom.ver',
+                    'ftp' => array(
+                        'root' => '/www',
+                        'server' => 'ftp.example.com',
+                        'username' => 'user',
+                        'password' => 'pass',
+                    )
+                )
+            );
+        ?>""")
+
+        entries = parse_php_config(str(config))
+
+        assert entries[0].version_file == "custom.ver"
+
+    def test_version_file_defaults_when_missing_or_empty(self, tmp_path: Path) -> None:
+        for name, setting in (("missing", ""), ("empty", "'version_file' => '',")):
+            config = tmp_path / f"config_version_{name}.php"
+            config.write_text(f"""<?php
+                return array(
+                    array(
+                        'name' => 'Versioned App',
+                        {setting}
+                        'ftp' => array(
+                            'root' => '/www',
+                            'server' => 'ftp.example.com',
+                            'username' => 'user',
+                            'password' => 'pass',
+                        )
+                    )
+                );
+            ?>""")
+
+            assert parse_php_config(str(config))[0].version_file == "deploy.ver"

@@ -8,6 +8,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_VERSION_FILE = "deploy.ver"
+
 _TOKEN_RE = re.compile(
     r"""
     (?P<STRING>'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")
@@ -43,6 +45,7 @@ class PhpDeployEntry:
     ftp_port: int = 0
     clear_remote_dirs: tuple[str, ...] = ()
     concurrent_uploads: int = 1
+    version_file: str = DEFAULT_VERSION_FILE
 
 
 def _digit_int(raw: Any, default: int) -> int:
@@ -159,6 +162,7 @@ def _entry_from_dict(data: dict[str, Any]) -> PhpDeployEntry | None:
         ftp_port=ftp_port,
         clear_remote_dirs=tuple(str(d) for d in clear_raw) if isinstance(clear_raw, list) else (),
         concurrent_uploads=concurrent_uploads,
+        version_file=str(data.get("version_file") or DEFAULT_VERSION_FILE),
     )
 
 

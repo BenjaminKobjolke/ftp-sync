@@ -28,6 +28,7 @@ from ftp_delete import (
     remove_empty_ftp_dirs,
 )
 from ftp_mtime import delete_old_ftp_files
+from git_version import local_git_commit, upload_version_file
 from ftp_ops import (
     connect_ftp,
     download_file,
@@ -153,6 +154,7 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
 
     try:
         if settings.direction == DIRECTION_UP:
+            failures_before = run_failures.count
             merged_files = build_merged_file_map(
                 settings.local_directories, settings.ignore_dirs, extra_ignore_patterns
             )
@@ -175,6 +177,7 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
                 logger.warning("DELETE_SOURCE_AFTER_DAYS is not yet supported for upload direction")
             if settings.delete_source_after_download:
                 logger.warning("DELETE_SOURCE_AFTER_DOWNLOAD only applies to the download direction")
+            _write_version_file(settings, ftp, failures_before)
         else:
             logger.info("Getting file lists...")
             deploy_spec = load_deployignore(settings.local_directories[0], extra_ignore_patterns)
@@ -210,6 +213,15 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
         # mask whatever error caused the sync to fail in the first place.
         with contextlib.suppress(Exception):
             ftp.quit()
+
+
+def _write_version_file(settings: Settings, ftp: ftplib.FTP, failures_before: int) -> None:
+    """Write the local Git revision only when this upload pass had no failures."""
+    if not settings.version_file or run_failures.count != failures_before:
+        return
+    commit = local_git_commit(settings.local_directories[0])
+    if commit is not None:
+        upload_version_file(ftp, settings, commit)
 
 
 def _upload_with_hash_cache(settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP) -> None:
@@ -258,7 +270,7 @@ def _upload_with_ftp_scan(settings: Settings, merged_files: dict[str, str], ftp:
     if settings.no_delete:
         logger.info("no-delete mode: skipping remote deletions")
     else:
-        delete_ftp_files(settings, ftp_files, set(merged_files.keys()))
+        delete_ftp_files(settings, ftp_files, set(merged_files) | {settings.version_file})
 
 
 if __name__ == "__main__":

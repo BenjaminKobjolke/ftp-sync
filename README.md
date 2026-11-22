@@ -15,6 +15,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Clear remote dirs after upload** — `CLEAR_REMOTE_DIRS` / `clearAfterUpload` empties configured remote folders (e.g. server-side caches) after each upload, keeping the folders themselves
 - **No-delete upload** — `--no-delete` / `NO_DELETE` uploads and updates files but never deletes remote files absent locally (keeps existing remote files)
 - **Verify remote** — `--verify-remote` / `VERIFY_REMOTE` (hash-cache upload) lists the server first and re-uploads files that changed or went missing there. The hash cache alone only knows what this machine uploaded, so a file overwritten from elsewhere (another machine, another cache, a manual upload) would otherwise be skipped forever, even when it has the same size
+- **Uploaded Git revision** — after a successful upload from a Git checkout, writes its `HEAD` commit hash to `deploy.ver` in the FTP root. Set `VERSION_FILE` empty to disable or choose another file name; PHP deploy configs use the top-level `version_file` key
 - **Ignore directories** — configurable list of directory names to skip during sync (both directions)
 - **`.deployignore`** — gitignore-style file placed in synced directories to exclude files/folders from sync
 - **PHP deploy config** — supports PHP config files from the deploy-tool (alternative to INI files)
@@ -177,6 +178,10 @@ CONCURRENT_UPLOADS_OR_DOWNLOADS = 1
 # Upload only: comma-separated remote dirs (relative to FTP_DIRECTORY) emptied after upload
 # All files and empty subdirs inside are deleted; the listed dirs themselves are kept
 # CLEAR_REMOTE_DIRS = cache/css, cache/js, cache/smarty/templates_c
+
+# Upload only: write the first local folder's Git HEAD to this FTP file after a successful upload
+# Set empty to disable
+# VERSION_FILE = deploy.ver
 ```
 
 `LOCAL_DIRECTORY` and `FTP_DIRECTORY` are optional in the INI file if provided via `--local-dir` / `--ftp-dir` CLI arguments.
