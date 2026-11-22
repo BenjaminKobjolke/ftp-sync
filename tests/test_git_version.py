@@ -6,7 +6,6 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from config import Settings
 from git_version import local_git_commit, upload_version_file
 from run_failures import run_failures
 from tests.main_test_helpers import make_settings

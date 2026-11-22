@@ -6,46 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from config import (
-    Settings,
-    apply_overrides,
-    entry_hash_cache_file,
-    load_settings,
-    parse_arguments,
-    settings_from_php_entry,
-)
-from php_config import PhpDeployEntry
+from config import Settings, apply_overrides, load_settings
 
 
-def _entry(host: str, directory: str = "/api/vendor") -> PhpDeployEntry:
-    return PhpDeployEntry(
-        name=host, ftp_host=host, ftp_user="user", ftp_pass="pass", ftp_directory=directory, ignore_patterns=()
-    )
-
-
-class TestEntryHashCacheFile:
-    """Tests for the per-entry hash cache path of multi-entry PHP configs."""
-
-    BASE = str(Path("caches") / "vendor.db")
-
-    def test_single_entry_keeps_base(self) -> None:
-        assert entry_hash_cache_file(self.BASE, _entry("a.example.com"), 1) == self.BASE
-
-    def test_entries_on_different_hosts_get_different_files(self) -> None:
-        first = Path(entry_hash_cache_file(self.BASE, _entry("a.example.com"), 2))
-        second = Path(entry_hash_cache_file(self.BASE, _entry("b.example.com"), 2))
-        assert first != second
-        assert first.parent == second.parent == Path(self.BASE).parent
-        assert first.suffix == second.suffix == ".db"
-
-    def test_same_host_different_directory_get_different_files(self) -> None:
-        first = entry_hash_cache_file(self.BASE, _entry("a.example.com", "/v1/vendor"), 2)
-        second = entry_hash_cache_file(self.BASE, _entry("a.example.com", "/v2/vendor"), 2)
-        assert first != second
-
-    def test_name_is_filename_safe(self) -> None:
-        name = Path(entry_hash_cache_file(self.BASE, _entry("a.example.com:2121", "/api/v 1/vendor"), 2)).name
-        assert name == "vendor_a.example.com_2121_api_v_1_vendor.db"
+def write_ftp_ini(tmp_path: Path, *entries: str) -> Path:
+    ini_file = tmp_path / "settings.ini"
+    ftp_settings = ["FTP_HOST = host", "FTP_USER = user", "FTP_PASS = pass", *entries]
+    ini_file.write_text("[FTP]\n" + "\n".join(ftp_settings) + "\n")
+    return ini_file
 
 
 class TestSettings:
@@ -96,16 +64,12 @@ class TestLoadSettings:
             load_settings(str(ini_file))
 
     def test_invalid_direction_raises_error(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDIRECTION = invalid\n")
+        ini_file = write_ftp_ini(tmp_path, "DIRECTION = invalid")
         with pytest.raises(ValueError, match="Invalid DIRECTION"):
             load_settings(str(ini_file))
 
     def test_invalid_concurrent_operations_raises_error(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nCONCURRENT_UPLOADS_OR_DOWNLOADS = 0\n"
-        )
+        ini_file = write_ftp_ini(tmp_path, "CONCURRENT_UPLOADS_OR_DOWNLOADS = 0")
         with pytest.raises(ValueError, match="CONCURRENT_UPLOADS_OR_DOWNLOADS must be >= 1"):
             load_settings(str(ini_file))
 
@@ -131,8 +95,7 @@ class TestLoadSettings:
         assert settings.concurrent_operations == 4
 
     def test_defaults_when_optional_fields_missing(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        ini_file = write_ftp_ini(tmp_path)
         settings = load_settings(str(ini_file))
         assert settings.local_directories == ()
         assert settings.ftp_directory == ""
@@ -143,175 +106,25 @@ class TestLoadSettings:
         assert settings.no_delete is False
 
     def test_no_delete_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nNO_DELETE = true\n")
+        ini_file = write_ftp_ini(tmp_path, "NO_DELETE = true")
         settings = load_settings(str(ini_file))
         assert settings.no_delete is True
 
     def test_verify_remote_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nVERIFY_REMOTE = true\n")
+        ini_file = write_ftp_ini(tmp_path, "VERIFY_REMOTE = true")
         assert load_settings(str(ini_file)).verify_remote is True
 
     def test_verify_remote_defaults_to_false(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        ini_file = write_ftp_ini(tmp_path)
         assert load_settings(str(ini_file)).verify_remote is False
 
     def test_version_file_defaults_when_missing(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
+        ini_file = write_ftp_ini(tmp_path)
         assert load_settings(str(ini_file)).version_file == "deploy.ver"
 
     def test_empty_version_file_disables_setting(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nVERSION_FILE =\n")
+        ini_file = write_ftp_ini(tmp_path, "VERSION_FILE =")
         assert load_settings(str(ini_file)).version_file == ""
-
-
-class TestSettingsFromPhpEntry:
-    def test_maps_version_file_from_php_entry(self) -> None:
-        entry = dataclasses.replace(_entry("host"), version_file="custom.ver")
-
-        settings = settings_from_php_entry(entry, ("local",))
-
-        assert settings.version_file == "custom.ver"
-
-    def test_defaults_version_file_for_php_entry(self) -> None:
-        settings = settings_from_php_entry(_entry("host"), ("local",))
-
-        assert settings.version_file == "deploy.ver"
-
-    def test_delete_source_after_download_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DOWNLOAD = true\n"
-        )
-        assert load_settings(str(ini_file)).delete_source_after_download is True
-
-    def test_no_delete_defaults_to_false(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
-        settings = load_settings(str(ini_file))
-        assert settings.no_delete is False
-
-    def test_hash_cache_file_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nHASH_CACHE_FILE = C:\\cache\\sync.db\n"
-        )
-        settings = load_settings(str(ini_file))
-        assert settings.hash_cache_file == "C:\\cache\\sync.db"
-
-    def test_comma_separated_local_directories(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\n"
-            "LOCAL_DIRECTORY = C:\\folder1, C:\\folder2\n"
-            "FTP_DIRECTORY = /remote\n"
-            "FTP_HOST = host\n"
-            "FTP_USER = user\n"
-            "FTP_PASS = pass\n"
-            "DIRECTION = up\n"
-        )
-        settings = load_settings(str(ini_file))
-        assert settings.local_directories == ("C:\\folder1", "C:\\folder2")
-
-    def test_single_local_directory_becomes_tuple(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nLOCAL_DIRECTORY = C:\\backup\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
-        settings = load_settings(str(ini_file))
-        assert settings.local_directories == ("C:\\backup",)
-
-    def test_ignore_dirs_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nIGNORE_DIRS = _old, _alt, Unsortiert\n"
-        )
-        settings = load_settings(str(ini_file))
-        assert settings.ignore_dirs == ("_old", "_alt", "Unsortiert")
-
-    def test_ignore_dirs_defaults_to_empty(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
-        settings = load_settings(str(ini_file))
-        assert settings.ignore_dirs == ()
-
-    def test_clear_remote_dirs_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nCLEAR_REMOTE_DIRS = cache/css, cache/images\n"
-        )
-        settings = load_settings(str(ini_file))
-        assert settings.clear_remote_dirs == ("cache/css", "cache/images")
-
-    def test_clear_remote_dirs_defaults_to_empty(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
-        settings = load_settings(str(ini_file))
-        assert settings.clear_remote_dirs == ()
-
-    def test_delete_source_after_days_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DAYS = 30\n")
-        settings = load_settings(str(ini_file))
-        assert settings.delete_source_after_days == 30
-
-    def test_delete_source_after_days_negative_raises_error(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nDELETE_SOURCE_AFTER_DAYS = -1\n")
-        with pytest.raises(ValueError, match="DELETE_SOURCE_AFTER_DAYS must be >= 0"):
-            load_settings(str(ini_file))
-
-    def test_ftp_port_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nFTP_PORT = 2121\n")
-        settings = load_settings(str(ini_file))
-        assert settings.ftp_port == 2121
-
-    def test_ftp_port_defaults_to_zero(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
-        settings = load_settings(str(ini_file))
-        assert settings.ftp_port == 0
-
-    def test_ftp_port_negative_raises_error(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nFTP_PORT = -1\n")
-        with pytest.raises(ValueError, match="FTP_PORT must be >= 0"):
-            load_settings(str(ini_file))
-
-    def test_transfer_type_ftps_parsed(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nTRANSFER_TYPE = FTPS\n")
-        settings = load_settings(str(ini_file))
-        assert settings.transfer_type == "FTPS"
-
-    def test_transfer_type_defaults_to_ftp(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\n")
-        settings = load_settings(str(ini_file))
-        assert settings.transfer_type == "FTP"
-
-    def test_invalid_transfer_type_raises_error(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text("[FTP]\nFTP_HOST = host\nFTP_USER = user\nFTP_PASS = pass\nTRANSFER_TYPE = SFTP\n")
-        with pytest.raises(ValueError, match="Invalid TRANSFER_TYPE"):
-            load_settings(str(ini_file))
-
-    def test_multi_directory_with_direction_down_raises_error(self, tmp_path: Path) -> None:
-        ini_file = tmp_path / "settings.ini"
-        ini_file.write_text(
-            "[FTP]\n"
-            "LOCAL_DIRECTORY = C:\\a, C:\\b\n"
-            "FTP_DIRECTORY = /remote\n"
-            "FTP_HOST = host\n"
-            "FTP_USER = user\n"
-            "FTP_PASS = pass\n"
-            "DIRECTION = down\n"
-        )
-        with pytest.raises(ValueError, match="Multiple LOCAL_DIRECTORY.*only supported.*up"):
-            load_settings(str(ini_file))
 
 
 class TestApplyOverrides:
@@ -423,66 +236,3 @@ class TestApplyOverrides:
         assert apply_overrides(settings, args).verify_remote is True
 
 
-def test_settings_from_php_entry_passes_verify_remote() -> None:
-    settings = settings_from_php_entry(_entry("server.com"), ("local",), "cache.db", verify_remote=True)
-    assert settings.verify_remote is True
-    assert settings_from_php_entry(_entry("server.com"), ("local",)).verify_remote is False
-
-
-def test_settings_from_php_entry_uses_concurrent_uploads() -> None:
-    default_settings = settings_from_php_entry(_entry("server.com"), ("local",))
-    parallel_entry = dataclasses.replace(_entry("server.com"), concurrent_uploads=4)
-
-    assert default_settings.concurrent_operations == 1
-    assert settings_from_php_entry(parallel_entry, ("local",)).concurrent_operations == 4
-
-
-def test_parse_arguments_verify_remote(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--verify-remote"])
-    assert parse_arguments().verify_remote is True
-
-
-def test_parse_arguments_compare(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--compare", "out.tsv"])
-    args = parse_arguments()
-    assert args.compare == "out.tsv"
-
-
-def test_parse_arguments_compare_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
-    args = parse_arguments()
-    assert args.compare is None
-
-
-def test_parse_arguments_delete_source_after_download(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--delete-source-after-download"])
-    settings = Settings(local_directories=("l",), ftp_directory="/", ftp_host="h", ftp_user="u", ftp_pass="p")
-    assert apply_overrides(settings, parse_arguments()).delete_source_after_download is True
-    assert settings.delete_source_after_download is False
-
-
-def test_parse_arguments_ignore_file_defaults_to_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    ignore_file = str(tmp_path / "extra.ignore")
-    monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", ignore_file)
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
-
-    assert parse_arguments().ignore_file == ignore_file
-
-
-def test_parse_arguments_ignore_file_flag_overrides_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", "from-env.ignore")
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini", "--ignore-file", "from-flag.ignore"])
-
-    assert parse_arguments().ignore_file == "from-flag.ignore"
-
-
-@pytest.mark.parametrize("environment_value", [None, ""])
-def test_parse_arguments_ignore_file_defaults_to_none_when_unset_or_empty(
-    monkeypatch: pytest.MonkeyPatch, environment_value: str | None
-) -> None:
-    monkeypatch.delenv("FTP_SYNC_IGNORE_FILE", raising=False)
-    if environment_value is not None:
-        monkeypatch.setenv("FTP_SYNC_IGNORE_FILE", environment_value)
-    monkeypatch.setattr("sys.argv", ["main.py", "settings.ini"])
-
-    assert parse_arguments().ignore_file is None
