@@ -165,7 +165,7 @@ class TestUploadWithHashCacheVerifyRemote:
         monkeypatch.setattr(remote_verify, "list_remote_facts", fake_list)
         monkeypatch.setattr(main, "sync_files", fake_sync)
 
-        main._upload_with_hash_cache(settings, merged, MagicMock(spec=ftplib.FTP))
+        main._upload_with_hash_cache(settings, merged, MagicMock(spec=ftplib.FTP), ())
 
         assert uploaded == ["composer/autoload_real.php"]
         assert calls == [None, {"composer"}]
@@ -180,7 +180,7 @@ class TestUploadWithHashCacheVerifyRemote:
         sync = MagicMock(return_value=[])
         monkeypatch.setattr(main, "sync_files", sync)
 
-        main._upload_with_hash_cache(settings, merged, MagicMock(spec=ftplib.FTP))
+        main._upload_with_hash_cache(settings, merged, MagicMock(spec=ftplib.FTP), ())
 
         sync.assert_not_called()
 
@@ -286,6 +286,6 @@ class TestVersionFileSync:
         delete = MagicMock()
         monkeypatch.setattr(main, "delete_ftp_files", delete)
 
-        main._upload_with_ftp_scan(settings, {}, MagicMock(spec=ftplib.FTP))
+        main._upload_with_ftp_scan(settings, {}, MagicMock(spec=ftplib.FTP), ())
 
         assert delete.call_args.args[2] == {"deploy.ver"}

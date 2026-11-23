@@ -3,7 +3,7 @@
 import logging
 import os
 import shutil
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -17,6 +17,25 @@ from run_failures import OP_TRANSFER, run_failures
 logger = logging.getLogger(__name__)
 
 MergedFileMap = dict[str, str]
+
+
+def _is_path_excluded(
+    rel_path: str,
+    deploy_spec: pathspec.PathSpec | None,
+    skip_dirs: set[str],
+    *,
+    is_dir: bool = False,
+) -> bool:
+    """Return whether a path or one of its ancestor directories is excluded."""
+    parts = rel_path.split("/")
+    directory_parts = parts if is_dir else parts[:-1]
+    if any(part in skip_dirs for part in directory_parts):
+        return True
+    if deploy_spec:
+        if any(deploy_spec.match_file("/".join(parts[:index]) + "/") for index in range(1, len(parts))):
+            return True
+        return deploy_spec.match_file(rel_path + "/" if is_dir else rel_path)
+    return False
 
 
 def get_local_files_recursive(
@@ -36,17 +55,37 @@ def get_local_files_recursive(
         full_path = os.path.join(local_dir, item)
         if os.path.isfile(full_path):
             rel_path = os.path.relpath(full_path, base_dir).replace("\\", "/")
-            if deploy_spec and deploy_spec.match_file(rel_path):
+            if _is_path_excluded(rel_path, deploy_spec, skip):
                 logger.debug("Skipping ignored file: %s", rel_path)
                 continue
             files.append(rel_path)
         elif os.path.isdir(full_path) and item not in skip:
             dir_rel_path = os.path.relpath(full_path, base_dir).replace("\\", "/")
-            if deploy_spec and deploy_spec.match_file(dir_rel_path + "/"):
+            if _is_path_excluded(dir_rel_path, deploy_spec, skip, is_dir=True):
                 logger.debug("Skipping ignored directory: %s", dir_rel_path)
                 continue
             files.extend(get_local_files_recursive(full_path, base_dir, ignore_dirs, deploy_spec))
     return files
+
+
+def excluded_paths(
+    paths: Iterable[str],
+    local_directories: tuple[str, ...],
+    ignore_dirs: tuple[str, ...],
+    extra_ignore_patterns: tuple[str, ...],
+) -> set[str]:
+    """Return the paths the ignore rules of any local directory exclude from upload."""
+    candidates = set(paths)
+    if not candidates:
+        return set()
+
+    skip_dirs = set(ignore_dirs) | {"old"}
+    specs = [load_deployignore(local_dir, extra_ignore_patterns) for local_dir in local_directories]
+    return {
+        path
+        for path in candidates
+        if any(_is_path_excluded(path, spec, skip_dirs) for spec in specs)
+    }
 
 
 def build_merged_file_map(

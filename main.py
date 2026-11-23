@@ -39,7 +39,7 @@ from ftp_ops import (
 from hash_db import delete_paths, filter_changed_files, find_deleted_paths, open_hash_db, upsert_hashes
 from remote_verify import uploaded_facts, with_remote_drift
 from run_failures import run_failures
-from sync import build_merged_file_map, get_local_files_recursive, handle_old_files, sync_files
+from sync import build_merged_file_map, excluded_paths, get_local_files_recursive, handle_old_files, sync_files
 from upload_list import php_upload_configs, run_list_files
 from watcher import watch_and_sync
 
@@ -165,9 +165,9 @@ def _run_sync(settings: Settings, extra_ignore_patterns: tuple[str, ...], resync
             )
 
             if settings.hash_cache_file:
-                _upload_with_hash_cache(settings, merged_files, ftp)
+                _upload_with_hash_cache(settings, merged_files, ftp, extra_ignore_patterns)
             else:
-                _upload_with_ftp_scan(settings, merged_files, ftp)
+                _upload_with_ftp_scan(settings, merged_files, ftp, extra_ignore_patterns)
 
             if settings.clear_remote_dirs:
                 logger.info("Clearing remote directories after upload...")
@@ -224,7 +224,11 @@ def _write_version_file(settings: Settings, ftp: ftplib.FTP, failures_before: in
         upload_version_file(ftp, settings, commit)
 
 
-def _upload_with_hash_cache(settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP) -> None:
+def _upload_with_hash_cache(
+    settings: Settings, merged_files: dict[str, str],
+    ftp: ftplib.FTP,
+    extra_ignore_patterns: tuple[str, ...],
+) -> None:
     """Upload using local hash database for change detection (no FTP scan)."""
     session = open_hash_db(settings.hash_cache_file)
 
@@ -247,18 +251,33 @@ def _upload_with_hash_cache(settings: Settings, merged_files: dict[str, str], ft
     if settings.no_delete:
         logger.info("no-delete mode: skipping remote deletions")
     else:
-        deleted = find_deleted_paths(session, set(merged_files.keys()))
-        if deleted:
-            logger.info("Deleting %d files from FTP that were removed locally...", len(deleted))
-            for rel in deleted:
-                delete_ftp_file(ftp, settings, rel)
-            delete_paths(session, deleted)
-            remove_empty_ftp_dirs(ftp, settings, deleted)
+        missing = find_deleted_paths(session, set(merged_files.keys()))
+        ignored = excluded_paths(missing, settings.local_directories, settings.ignore_dirs, extra_ignore_patterns)
+        if ignored:
+            logger.info(
+                "Dropping %d hash cache entries now excluded by ignore rules; remote files are kept",
+                len(ignored),
+            )
+            for path in sorted(ignored):
+                logger.debug("Dropping ignored hash cache entry: %s", path)
+            delete_paths(session, sorted(ignored))
+
+        remaining = [path for path in missing if path not in ignored]
+        if remaining:
+            logger.info("Deleting %d files from FTP that were removed locally...", len(remaining))
+            removed = [rel for rel in remaining if delete_ftp_file(ftp, settings, rel)]
+            if removed:
+                delete_paths(session, removed)
+                remove_empty_ftp_dirs(ftp, settings, removed)
 
     session.close()
 
 
-def _upload_with_ftp_scan(settings: Settings, merged_files: dict[str, str], ftp: ftplib.FTP) -> None:
+def _upload_with_ftp_scan(
+    settings: Settings, merged_files: dict[str, str],
+    ftp: ftplib.FTP,
+    extra_ignore_patterns: tuple[str, ...],
+) -> None:
     """Upload using FTP scan and size-based skip (legacy mode)."""
     logger.info("Getting file lists...")
     ftp_files = get_ftp_files_recursive(ftp, ignore_dirs=settings.ignore_dirs)
@@ -270,7 +289,10 @@ def _upload_with_ftp_scan(settings: Settings, merged_files: dict[str, str], ftp:
     if settings.no_delete:
         logger.info("no-delete mode: skipping remote deletions")
     else:
-        delete_ftp_files(settings, ftp_files, set(merged_files) | {settings.version_file})
+        keep_files = set(merged_files) | {settings.version_file} | excluded_paths(
+            ftp_files, settings.local_directories, settings.ignore_dirs, extra_ignore_patterns
+        )
+        delete_ftp_files(settings, ftp_files, keep_files)
 
 
 if __name__ == "__main__":

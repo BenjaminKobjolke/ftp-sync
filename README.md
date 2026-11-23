@@ -11,7 +11,7 @@ Sync a local folder with an FTP folder. Supports both download and upload direct
 - **Hash-based change detection** — optional SQLite cache tracks file hashes locally, skipping FTP scanning entirely and only uploading files whose content actually changed
 - **Old file handling** — when downloading, local files no longer on the server are moved to an `old` subfolder
 - **Multi-directory upload** — sync multiple local folders into one FTP directory (newer file wins on conflicts)
-- **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode)
+- **FTP deletion** — files removed from all local folders are deleted from FTP (upload mode), while files matching `.deployignore` are kept remotely in both hash-cache and scan modes. Newly ignored hash-cache entries are dropped without a remote delete; failed remote deletes keep their cache entry and are retried next run.
 - **Clear remote dirs after upload** — `CLEAR_REMOTE_DIRS` / `clearAfterUpload` empties configured remote folders (e.g. server-side caches) after each upload, keeping the folders themselves
 - **No-delete upload** — `--no-delete` / `NO_DELETE` uploads and updates files but never deletes remote files absent locally (keeps existing remote files)
 - **Verify remote** — `--verify-remote` / `VERIFY_REMOTE` (hash-cache upload) lists the server first and re-uploads files that changed or went missing there. The hash cache alone only knows what this machine uploaded, so a file overwritten from elsewhere (another machine, another cache, a manual upload) would otherwise be skipped forever, even when it has the same size

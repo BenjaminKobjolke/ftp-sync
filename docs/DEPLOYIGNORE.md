@@ -9,8 +9,10 @@ Place a `.deployignore` file in the **root of each synced local directory** (the
 
 It applies to both directions:
 
-- **Upload** (`direction = up`): matching local files are never uploaded (loaded per local
-  directory in `sync.py`).
+- **Upload** (`direction = up`): matching local files are never uploaded or deleted remotely,
+  in either hash-cache or FTP-scan mode (loaded per local directory in `sync.py`). In hash-cache
+  mode, a cached path newly matched by an ignore rule is dropped from the cache without touching
+  its remote copy.
 - **Download** (`direction = down`): matching remote files are never downloaded, and matching
   local files are excluded from the comparison (loaded from the first local directory in
   `main.py`).

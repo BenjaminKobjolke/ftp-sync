@@ -6,7 +6,7 @@ from pathlib import Path
 from config import Settings
 from deployignore import load_ignore_file
 from run_failures import run_failures
-from sync import build_merged_file_map, get_local_files_recursive, sync_files
+from sync import build_merged_file_map, excluded_paths, get_local_files_recursive, sync_files
 
 
 def test_sync_files_records_failed_operation(tmp_path: Path) -> None:
@@ -147,3 +147,42 @@ class TestGetLocalFilesRecursive:
         result = get_local_files_recursive(str(tmp_path), ignore_dirs=("_old",))
         assert "level1/visible.txt" in result
         assert "level1/_old/nested.txt" not in result
+
+
+class TestExcludedPaths:
+    """Tests for paths excluded from local upload by deployignore rules."""
+
+    def test_excludes_path_under_deployignore_directory_pattern(self, tmp_path: Path) -> None:
+        (tmp_path / ".deployignore").write_text("data/mcp-tool-cache/\n")
+
+        result = excluded_paths(
+            ("data/mcp-tool-cache/x.ser",), (str(tmp_path),), (), ()
+        )
+
+        assert result == {"data/mcp-tool-cache/x.ser"}
+
+    def test_excludes_path_matched_by_extra_pattern(self, tmp_path: Path) -> None:
+        result = excluded_paths(("private/cache.bin",), (str(tmp_path),), (), ("private/",))
+
+        assert result == {"private/cache.bin"}
+
+    def test_excludes_paths_under_skipped_directory_segments(self, tmp_path: Path) -> None:
+        result = excluded_paths(
+            ("a/_old/b.txt", "old/archive.txt"), (str(tmp_path),), ("_old",), ()
+        )
+
+        assert result == {"a/_old/b.txt", "old/archive.txt"}
+
+    def test_keeps_plain_path_not_matched_by_ignore_rules(self, tmp_path: Path) -> None:
+        assert excluded_paths(("index.php",), (str(tmp_path),), (), ()) == set()
+
+    def test_uses_ignore_rules_from_any_local_directory(self, tmp_path: Path) -> None:
+        first = tmp_path / "first"
+        second = tmp_path / "second"
+        first.mkdir()
+        second.mkdir()
+        (second / ".deployignore").write_text("private/\n")
+
+        result = excluded_paths(("private/cache.bin",), (str(first), str(second)), (), ())
+
+        assert result == {"private/cache.bin"}
