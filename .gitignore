@@ -175,3 +175,4 @@ code_analysis_results/
 coding-rules.json
 
 tools/analyze_code_config.bat
+tools/live_check_test_target.ini
